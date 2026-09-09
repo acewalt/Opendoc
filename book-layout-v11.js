@@ -38,15 +38,24 @@
     document.querySelectorAll('.waltiva-docx-page-slot').forEach(slot=>{
       const page=slot.querySelector(':scope > section.docx'); if(!page) return;
       const w=parseFloat(slot.dataset.baseWidth)||816, h=parseFloat(slot.dataset.baseHeight)||1056;
-      slot.style.width=(w*z)+'px'; slot.style.height=(h*z)+'px';
-      page.style.transform='scale('+z+')';
-      page.style.zoom='1';
+      const sw=w*z, sh=h*z;
+      if(Math.abs((parseFloat(slot.style.width)||0)-sw)>.2) slot.style.width=sw+'px';
+      if(Math.abs((parseFloat(slot.style.height)||0)-sh)>.2) slot.style.height=sh+'px';
+      const transform='scale('+z+')';
+      if(page.style.transform!==transform) page.style.transform=transform;
+      if(page.style.zoom!=='1') page.style.zoom='1';
     });
   }
 
   document.addEventListener('waltiva-docx-pages-ready',()=>setTimeout(apply,0));
-  const mo=new MutationObserver(()=>setTimeout(apply,0));
-  mo.observe(editor,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class']});
+
+  /* Child changes can create/remove rendered DOCX pages. Do not watch descendant styles,
+     otherwise our own scale updates would recursively trigger another layout pass. */
+  const treeObserver=new MutationObserver(()=>setTimeout(apply,0));
+  treeObserver.observe(editor,{subtree:true,childList:true});
+  const editorObserver=new MutationObserver(()=>setTimeout(apply,0));
+  editorObserver.observe(editor,{attributes:true,attributeFilter:['style','class']});
+
   document.addEventListener('input',e=>{if(e.target&&e.target.matches&&e.target.matches('.zoom-range'))requestAnimationFrame(apply);},true);
   document.addEventListener('click',e=>{if(e.target.closest('.waltiva-zoom-status'))setTimeout(apply,0);},true);
   window.addEventListener('resize',()=>setTimeout(apply,0));
