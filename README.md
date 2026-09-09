@@ -16,6 +16,8 @@ Waltiva es un visor/editor de documentos que funciona completamente en el navega
 - Exportación a `.doc` compatible con Word basada en HTML.
 - Impresión / exportación a PDF desde el navegador.
 - Sin backend: los documentos no se suben a ningún servidor.
+- Regla de página estilo Word con márgenes izquierdo/derecho arrastrables.
+- Selector “Descargas / Archivos” y lista local de documentos importados recientemente.
 
 ## Límites técnicos importantes
 
