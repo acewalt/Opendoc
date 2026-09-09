@@ -1,0 +1,35 @@
+name: Wire Waltiva editor pro V4
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect pro editor assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          if './editor-pro-v4.css' not in s:
+              s=s.replace('  <link rel="stylesheet" href="./editor-compact.css" />','  <link rel="stylesheet" href="./editor-compact.css" />\n  <link rel="stylesheet" href="./editor-pro-v4.css" />')
+          if './docx-export.js' not in s:
+              s=s.replace('  <script src="./editor-compact.js"></script>','  <script src="./editor-compact.js"></script>\n  <script src="./docx-export.js"></script>\n  <script src="./editor-pro-v4.js"></script>')
+          p.write_text(s,encoding='utf-8')
+          PY
+          rm -f .github/workflows/wire-editor-pro-v4.yml
+      - name: Commit wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/wire-editor-pro-v4.yml
+          git commit -m "Enable native DOCX and pro document editing" || exit 0
+          git push
