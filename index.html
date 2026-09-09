@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
+  <title>Opendoc</title>
+  <meta name="description" content="Visor y editor local de PDF y documentos de Word en el navegador." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">O</div>
+      <div>
+        <strong>Opendoc</strong>
+        <span>PDF + Word, local en tu navegador</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="button primary" for="fileInput">Abrir archivo</label>
+      <input id="fileInput" type="file" hidden
+        accept=".pdf,.doc,.dot,.docx,.docm,.dotx,.dotm,.rtf,.odt,.txt,.html,.htm,.xml,.mht,.mhtml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+      <button id="editToggle" class="button" disabled>Editar</button>
+      <button id="clearButton" class="button ghost" disabled>Limpiar</button>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <aside class="sidebar">
+      <section id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Arrastra un documento o pulsa para abrirlo">
+        <div class="drop-icon">⇩</div>
+        <h1>Arrastra un documento</h1>
+        <p>PDF, DOC, DOCX, DOCM, DOT/DOTX/DOTM, RTF, ODT, TXT, HTML y XML.</p>
+        <span>o toca aquí para buscarlo</span>
+      </section>
+
+      <section class="file-card hidden" id="fileCard">
+        <div class="file-badge" id="fileBadge">DOC</div>
+        <div class="file-meta">
+          <strong id="fileName">—</strong>
+          <span id="fileInfo">—</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Modo</h2>
+        <div class="mode-row">
+          <span id="modeDot" class="status-dot"></span>
+          <div>
+            <strong id="modeTitle">Sin documento</strong>
+            <p id="modeText">Abre un archivo para comenzar.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel export-panel">
+        <h2>Exportar</h2>
+        <button id="exportHtml" class="button wide" disabled>HTML editable</button>
+        <button id="exportWord" class="button wide" disabled>Word editable (.doc)</button>
+        <p class="small">El .doc exportado es HTML compatible con Microsoft Word. Para DOCX nativo se añadirá un serializador OOXML en la siguiente fase.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Privacidad</h2>
+        <p class="small">Los archivos se procesan en este dispositivo. Opendoc no los sube a un servidor.</p>
+      </section>
+    </aside>
+
+    <section class="workspace-shell">
+      <div id="editorToolbar" class="editor-toolbar" aria-label="Herramientas de edición">
+        <button data-cmd="bold" title="Negrita"><b>B</b></button>
+        <button data-cmd="italic" title="Cursiva"><i>I</i></button>
+        <button data-cmd="underline" title="Subrayado"><u>U</u></button>
+        <span class="separator"></span>
+        <button data-cmd="justifyLeft" title="Alinear a la izquierda">≡</button>
+        <button data-cmd="justifyCenter" title="Centrar">≡</button>
+        <button data-cmd="justifyRight" title="Alinear a la derecha">≡</button>
+        <span class="separator"></span>
+        <button data-cmd="undo" title="Deshacer">↶</button>
+        <button data-cmd="redo" title="Rehacer">↷</button>
+      </div>
+
+      <div id="notice" class="notice hidden"></div>
+
+      <div id="emptyState" class="empty-state">
+        <div class="empty-graphic">
+          <div class="paper paper-back"></div>
+          <div class="paper paper-front"><span>PDF</span><span>DOCX</span></div>
+        </div>
+        <h2>Abre un documento para previsualizarlo</h2>
+        <p>Con PDF verás las páginas originales y podrás activar una capa editable. Con Word, el contenido se renderiza directamente en HTML.</p>
+      </div>
+
+      <div id="documentCanvas" class="document-canvas hidden" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <div id="busy" class="busy hidden" aria-live="assertive">
+    <div class="spinner"></div>
+    <strong id="busyText">Procesando documento…</strong>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.4.0/dist/docx-preview.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Alpaq92/JSDoc@821695a884e0c0bb8592a635d9524bb3e116cd67/src/docToText.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
