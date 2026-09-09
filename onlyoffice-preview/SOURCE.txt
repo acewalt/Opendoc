@@ -1,0 +1,5 @@
+Waltiva ONLYOFFICE engine preview
+Source branch: onlyoffice-engine
+Upstream: sweetwisdom/onlyoffice-web-local
+Upstream commit: c4905016372a633cfba59a78f0acb3f029c85883
+License: GNU AGPL-3.0
