@@ -1,0 +1,36 @@
+name: Wire Waltiva Surface V13
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'surface-mode-v13.css'
+      - 'surface-mode-v13.js'
+      - '.github/workflows/wire-surface-v13.yml'
+permissions:
+  contents: write
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect V13
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          css='  <link rel="stylesheet" href="./surface-mode-v13.css" />\n'
+          js='  <script src="./surface-mode-v13.js"></script>\n'
+          if 'surface-mode-v13.css' not in s:
+              s=s.replace('</head>', css+'</head>')
+          if 'surface-mode-v13.js' not in s:
+              s=s.replace('</body>', js+'</body>')
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "Fix document surface modes V13"
+          git push
