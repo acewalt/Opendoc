@@ -10,14 +10,35 @@
   const MIN=50,MAX=160,STEP=5;
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
+  function countPagesIn(surface){
+    if(!surface) return 0;
+
+    /* DOCX V11 wraps every rendered page in a physical slot. Count those first;
+       otherwise the editable surface looks like a single child (.docx-wrapper)
+       and automatic book view never activates. */
+    let n=surface.querySelectorAll('.waltiva-docx-page-slot').length;
+    if(n) return n;
+
+    n=surface.querySelectorAll('section.docx').length;
+    if(n) return n;
+
+    n=surface.querySelectorAll('.pdf-fidelity-page,.pdf-preview-page').length;
+    if(n) return n;
+
+    n=surface.querySelectorAll('.editable-page,.legacy-document').length;
+    if(n) return n;
+
+    return surface.children.length||0;
+  }
+
   function pageCount(){
-    if(!original.classList.contains('hidden')){
-      const n=original.querySelectorAll('.pdf-preview-page,.docx').length;
-      if(n)return n;
-    }
-    let n=editable.querySelectorAll(':scope > .editable-page,:scope > .legacy-document,:scope > .pdf-fidelity-page').length;
-    if(!n)n=editable.querySelectorAll('.docx-wrapper > section.docx').length;
-    return Math.max(1,n||editable.children.length||1);
+    /* The visible surface owns pagination. This keeps Preview and Editable
+       consistent and prevents a hidden duplicate surface from deciding layout. */
+    const active=!editable.classList.contains('hidden')?editable:
+                 !original.classList.contains('hidden')?original:null;
+    let n=countPagesIn(active);
+    if(!n) n=Math.max(countPagesIn(editable),countPagesIn(original));
+    return Math.max(1,n||1);
   }
 
   function canSpread(){return window.innerWidth>760&&pageCount()>1;}
@@ -69,6 +90,9 @@
     two.classList.toggle('active',spread);
     two.disabled=!canSpread();
     two.title=canSpread()?'Dos páginas':'Se necesitan al menos dos páginas';
+    /* DOCX physical slots are created after initial render; ask V11 to refresh
+       after layout mode changes by emitting its existing readiness event. */
+    document.dispatchEvent(new CustomEvent('waltiva-book-view-change',{detail:{spread:spread,zoom:state.zoom}}));
   }
 
   function applyZoom(value,{clearForced=true,announce=false}={}){
@@ -96,13 +120,11 @@
   one.addEventListener('click',()=>{state.forced='single';updateMode();});
   two.addEventListener('click',()=>{if(!canSpread())return;state.forced='two';updateMode();});
 
-  /* Take control of the old toolbar +/- without invoking app.js's transform zoom. */
   ['zoomOut','zoomIn'].forEach(id=>{
     const b=$(id);if(!b)return;
     b.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();step(id==='zoomOut'?-STEP:STEP);},true);
   });
 
-  /* Word-like keyboard zoom shortcuts. */
   document.addEventListener('keydown',e=>{
     if(editor.classList.contains('hidden')||!(e.ctrlKey||e.metaKey))return;
     if(e.key==='0'){e.preventDefault();applyZoom(100,{clearForced:true,announce:true});return;}
@@ -110,21 +132,26 @@
     if(e.key==='-'){e.preventDefault();step(-STEP);}
   },true);
 
-  /* Ctrl/Cmd + wheel adjusts document zoom while pointer is on the canvas. */
   writing.addEventListener('wheel',e=>{
     if(!(e.ctrlKey||e.metaKey))return;
     e.preventDefault();step(e.deltaY>0?-STEP:STEP);
   },{passive:false,capture:true});
 
+  /* Watch descendants because DOCX page slots are created inside .docx-wrapper,
+     not as direct children of editableSurface. */
   const mo=new MutationObserver(()=>{neutralizeLegacyZoom();updateMode();});
-  mo.observe(editable,{childList:true,subtree:false});
-  mo.observe(original,{childList:true,subtree:false,attributes:true,attributeFilter:['class']});
+  mo.observe(editable,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+  mo.observe(original,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
   window.addEventListener('resize',updateMode);
   const viewOriginal=$('viewOriginal'),editToggle=$('editToggle');
   if(viewOriginal)viewOriginal.addEventListener('click',()=>setTimeout(updateMode,0));
   if(editToggle)editToggle.addEventListener('click',()=>setTimeout(updateMode,0));
+  document.addEventListener('waltiva-docx-pages-ready',()=>setTimeout(updateMode,0));
+  document.addEventListener('waltiva-book-view-change',()=>setTimeout(()=>{
+    if(window.WaltivaSpreadFixV12&&window.WaltivaSpreadFixV12.refresh) window.WaltivaSpreadFixV12.refresh();
+  },0));
 
   let initial=100;try{initial=Number(localStorage.getItem('waltiva-doc-zoom'))||100;}catch(_){}
   applyZoom(initial,{clearForced:true});
-  window.WaltivaZoomV10={set:(z)=>applyZoom(z,{clearForced:true}),get:()=>state.zoom,setView:(m)=>{state.forced=m==='two'?'two':m==='single'?'single':null;updateMode();}};
+  window.WaltivaZoomV10={set:(z)=>applyZoom(z,{clearForced:true}),get:()=>state.zoom,setView:(m)=>{state.forced=m==='two'?'two':m==='single'?'single':null;updateMode();},refresh:updateMode};
 })();
