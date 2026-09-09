@@ -1,0 +1,37 @@
+name: Wire Waltiva Book V11
+on:
+  push:
+    paths:
+      - '.github/workflows/wire-book-v11.yml'
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect DOCX pagination V11
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          s=s.replace('docx-preview@0.3.6/dist/docx-preview.min.js','docx-preview@0.4.0/dist/docx-preview.min.js')
+          css='  <link rel="stylesheet" href="./book-layout-v11.css" />\n'
+          if 'book-layout-v11.css' not in s:
+              s=s.replace('  <link rel="stylesheet" href="./zoom-spread-v10.css" />\n','  <link rel="stylesheet" href="./zoom-spread-v10.css" />\n'+css)
+          early='  <script src="./docx-render-fix-v11.js"></script>\n'
+          if 'docx-render-fix-v11.js' not in s:
+              s=s.replace('  <script src="./app.js"></script>\n',early+'  <script src="./app.js"></script>\n')
+          late='  <script src="./book-layout-v11.js"></script>\n'
+          if 'book-layout-v11.js' not in s:
+              s=s.replace('  <script src="./zoom-spread-v10.js"></script>\n','  <script src="./zoom-spread-v10.js"></script>\n'+late)
+          p.write_text(s)
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git diff --cached --quiet || git commit -m "Fix DOCX pagination and book view V11"
+          git push
