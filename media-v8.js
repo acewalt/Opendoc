@@ -127,7 +127,7 @@
         else if(fn===OPS.paintImageXObject||fn===OPS.paintJpegXObject){obj=await getPageObj(pdfPage,args[0]);}
         else continue;
         const natural=pdfPage.getViewport({scale:1});const pageW=parseFloat(pageEl.dataset.pdfWidth)||pageEl.offsetWidth;const viewport=pdfPage.getViewport({scale:pageW/natural.width});const combined=mul(viewport.transform,ctm);const box=bboxFromMatrix(combined);
-        if(box.width<8||box.height<8||box.width*box.height<180)continue;
+        const pageH=parseFloat(pageEl.dataset.pdfHeight)||pageEl.offsetHeight;if(box.width<8||box.height<8||box.width*box.height<180||box.width*box.height>pageW*pageH*.78)continue;
         const ic=imageCanvas(obj);if(!ic)continue;
         const key=[Math.round(box.left),Math.round(box.top),Math.round(box.width),Math.round(box.height)].join(':');if(found.some(x=>x.key===key))continue;
         found.push({key,box,src:ic.toDataURL('image/png')});if(found.length>=80)break;
