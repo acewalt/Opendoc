@@ -1,0 +1,47 @@
+name: Apply Waltiva editor enhancements
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wire enhancement assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          if './enhancements.css' not in s:
+              s = s.replace('<link rel="stylesheet" href="./styles.css" />', '<link rel="stylesheet" href="./styles.css" />\n  <link rel="stylesheet" href="./enhancements.css" />')
+          if './enhancements.js' not in s:
+              s = s.replace('<script src="./app.js"></script>', '<script src="./app.js"></script>\n  <script src="./enhancements.js"></script>')
+          p.write_text(s, encoding='utf-8')
+
+          r = Path('README.md')
+          if r.exists():
+              txt = r.read_text(encoding='utf-8')
+              if 'Regla de página estilo Word' not in txt:
+                  marker = '- Sin backend: los documentos no se suben a ningún servidor.\n'
+                  addition = ('- Regla de página estilo Word con márgenes izquierdo/derecho arrastrables.\n'
+                              '- Selector “Descargas / Archivos” y lista local de documentos importados recientemente.\n')
+                  txt = txt.replace(marker, marker + addition)
+              txt = txt.replace('https://acewalt.github.io/Opendoc/', 'https://acewalt.github.io/Waltiva/')
+              r.write_text(txt, encoding='utf-8')
+          PY
+      - name: Remove one-time workflow and commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-editor-enhancements.yml
+          git add index.html README.md
+          git commit -m "Enable Word-style ruler and local recent files"
+          git push
