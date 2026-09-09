@@ -1,47 +1,115 @@
-# Waltiva
+# office-web-local
 
-Waltiva es un visor/editor de documentos que funciona completamente en el navegador y está pensado para desplegarse en GitHub Pages.
+A purely local project based on OnlyOffice, supporting local `opening and editing` of Office documents.
 
-## Funciones actuales
+[Live Demo🪄](https://sweetwisdom.github.io/onlyoffice-web-local/)
 
-- Crear documentos nuevos desde una página en blanco.
-- Importar PDF, DOC, DOT, DOCX, DOCM, DOTX, DOTM, RTF, ODT, TXT, HTML, HTM, XML, MHT y MHTML.
-- PDF: vista original con PDF.js y reconstrucción del texto en páginas editables tipo Word.
-- DOCX / DOCM / DOTX / DOTM: renderizado Office Open XML con `docx-preview` y edición del DOM renderizado.
-- DOC / DOT (Word 97–2003): lectura local con JSDoc, incluyendo texto, estilos, tablas e imágenes rasterizadas recuperables.
-- RTF y ODT: importación y reconstrucción editable del contenido principal.
-- Editor con estilos de párrafo, fuentes, tamaños, negrita, cursiva, subrayado, tachado, subíndice, superíndice, colores, resaltado, alineación, listas, sangría, enlaces, imágenes, tablas, líneas, saltos de página, deshacer/rehacer y zoom.
-- Modo claro y modo noche.
-- Exportación a HTML editable.
-- Exportación a `.doc` compatible con Word basada en HTML.
-- Impresión / exportación a PDF desde el navegador.
-- Sin backend: los documentos no se suben a ningún servidor.
-- Regla de página estilo Word con márgenes izquierdo/derecho arrastrables.
-- Selector “Descargas / Archivos” y lista local de documentos importados recientemente.
+A local web-based document editor based on OnlyOffice, allowing you to edit documents directly in your browser without server-side processing, ensuring your privacy and security.
 
-## Límites técnicos importantes
 
-PDF no es un formato de edición semántica. Waltiva conserva una vista original del PDF y genera una reconstrucción editable del texto. Esto funciona bien en documentos convencionales, pero no puede reconstruir de forma perfecta todas las fuentes incrustadas, columnas, fondos complejos, cuadros de texto, gráficos vectoriales o escaneos sin OCR.
+[English](README.md) | [中文](readme.zh.md)
 
-La edición de DOCX de esta versión modifica el HTML renderizado. La exportación nativa de vuelta a `.docx` requiere un serializador OOXML/editor dedicado.
 
-Los `.doc` binarios antiguos pueden contener OLE, WMF/EMF, macros y estructuras que un navegador no puede reproducir exactamente.
+## ✨ Key Features
 
-## Dependencias CDN
+- 🔒 **Privacy-First**: All document processing happens locally in your browser, with no uploads to any server
+- 📝 **Multi-Format Support**: Supports DOCX, XLSX, PPTX, and many other document formats
+- ⚡ **Real-Time Editing**: Provides smooth real-time document editing experience
+- 🚀 **No Server Required**: Pure frontend implementation with no server-side processing needed
+- 🎯 **Ready to Use**: Start editing documents immediately by opening the webpage
 
-- PDF.js `pdfjs-dist@3.11.174`
-- JSZip `3.10.1`
-- docx-preview `0.3.6`
-- JSDoc (lector Word 97–2003, 0BSD), fijado al commit `821695a`
+## 🛠️ Technical Architecture
 
-## GitHub Pages
+This project is built on the following core technologies:
 
-El proyecto no necesita compilación. GitHub Pages publica directamente desde la rama `main`.
+- **OnlyOffice SDK**: Provides powerful document editing capabilities
+- **WebAssembly**: Implements document format conversion through x2t-wasm
+- **Pure Frontend Architecture**: All functionality runs in the browser
 
-Sitio: `https://acewalt.github.io/Waltiva/`
+## 📄 Opening Remote Files
 
-Repositorio: `https://github.com/acewalt/Waltiva`
+### Functionality
 
-## Próximas mejoras
+Automatically downloads and opens remote Office files (e.g., `.docx`, `.pptx`) via route parameters, converting them into `File` objects for further use (e.g., preview or editing).
 
-Para acercarse a una conversión PDF → DOCX editable con mayor fidelidad, la arquitectura debe incorporar un motor OOXML real, análisis de layout y OCR para PDFs escaneados.
+### Usage
+
+The page URL must include the following parameters:
+
+- `url` (required): Remote file address
+- `filename` (optional): File name; if not provided, it will attempt to auto-resolve
+
+Example:
+[00.xlsx](https://sweetwisdom.github.io/onlyoffice-web-local/#/?url=https://sweetwisdom.github.io/react-filePreview/filePreview/00.xlsx)
+
+```
+?filename=00.pptx&url=https://example.com/files/00.pptx
+```
+
+### File Name Retrieval Priority
+
+1. Route parameter `filename`
+2. Parsed from `url`
+3. Extracted from response header `Content-Disposition`
+
+If the file name cannot be retrieved, the operation will terminate with an error prompt.
+
+## Word
+
+![recording](./.imgs/recording.gif)
+
+## Excel
+
+![image-20250524104950359](./.imgs/image-20250524104950359.png)
+
+## PPT
+
+![image-20250524105044644](./.imgs/image-20250524105044644.png)
+
+## Export Document
+
+![image-20250524104854846](./.imgs/image-20250524104854846.png)
+
+## Development Setup
+
+```sh
+pnpm install
+```
+
+### Compile and Hot-Reload for Development
+
+```sh
+pnpm dev
+```
+
+### Type-Check, Compile, and Minify for Production
+
+```sh
+pnpm build
+```
+
+## Docker Support
+
+Build a custom image named `vue-local-office` (note: the `.` at the end of the command indicates using the Dockerfile in the current directory; adjust the path as needed):
+
+```sh
+docker build -t vue-local-office .
+```
+
+Map ports and start the Docker container (8080:80 maps the container's port 80 to the host's port 8080; `local-office` is the custom container name; `vue-local-office` is the custom image name):
+
+```sh
+docker run -dp 8080:80 --name local-office vue-local-office
+```
+
+After executing the above commands, open http://localhost:8080 in a browser to preview.
+
+## Technical Details
+
+- Uses `x2t-wasm` as a replacement for OnlyOffice services
+- Utilizes OnlyOffice WebSDK for editing (sourced from `se-office`)
+
+## References
+
+- [Qihoo360/se-office: A full-featured office productivity suite based on open standards, enabling browser-based preview and editing of Office files.](https://github.com/Qihoo360/se-office)
+- [cryptpad/onlyoffice-x2t-wasm: CryptPad WebAssembly file conversion tool](https://github.com/cryptpad/onlyoffice-x2t-wasm)
