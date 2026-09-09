@@ -1,0 +1,126 @@
+/* Waltiva Fidelity V5 — softer library cards + PDF layout-preserving edit mode */
+
+/* Library: small portrait cards, clearly rectangular, softly rounded. */
+.library-view .document-grid{
+  width:min(390px,100%)!important;
+  max-width:390px!important;
+  grid-template-columns:repeat(2,minmax(0,172px))!important;
+  gap:14px!important;
+  margin-top:20px!important;
+}
+.library-view .document-card{max-width:172px!important}
+.library-view .doc-cover{
+  width:172px!important;
+  height:auto!important;
+  min-height:0!important;
+  aspect-ratio:172/216!important;
+  border-radius:14px!important;
+  font-size:28px!important;
+  box-shadow:0 9px 24px rgba(58,75,110,.055)!important;
+}
+.library-view .document-card:hover .doc-cover{transform:translateY(-2px)!important}
+.library-view .document-card strong{font-size:12px!important;margin-top:8px!important}
+.library-view .document-card span{font-size:9px!important;margin-top:2px!important}
+
+/* PDF fidelity page: page geometry comes from the PDF itself. */
+.editor-v3 .pdf-fidelity-page{
+  position:relative!important;
+  width:min(var(--pdf-base-w,760px),100%)!important;
+  height:auto!important;
+  min-height:0!important;
+  aspect-ratio:var(--pdf-aspect, 612 / 792)!important;
+  margin:0 auto 18px!important;
+  padding:0!important;
+  overflow:hidden!important;
+  border-radius:9px!important;
+  background:#fff!important;
+  color:#111!important;
+  box-shadow:0 10px 34px rgba(40,56,86,.11)!important;
+  border:1px solid rgba(205,214,227,.82)!important;
+  outline:none!important;
+  isolation:isolate;
+}
+:root[data-theme="dark"] .editor-v3 .pdf-fidelity-page{
+  background:#fff!important;
+  color:#111!important;
+  border-color:#394150!important;
+  box-shadow:0 13px 42px rgba(0,0,0,.28)!important;
+}
+.pdf-fidelity-bg{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  object-fit:fill!important;
+  pointer-events:none!important;
+  user-select:none!important;
+  z-index:0!important;
+  border-radius:inherit!important;
+}
+.pdf-fidelity-text-layer{
+  position:absolute!important;
+  inset:0!important;
+  z-index:2!important;
+  overflow:hidden!important;
+  pointer-events:none!important;
+}
+.pdf-fidelity-text{
+  position:absolute!important;
+  display:block!important;
+  min-width:2px;
+  min-height:1em;
+  margin:0!important;
+  padding:0 1px!important;
+  border:0!important;
+  outline:none!important;
+  white-space:pre!important;
+  line-height:1!important;
+  transform-origin:left top!important;
+  pointer-events:auto!important;
+  color:var(--pdf-fg,#111)!important;
+  background:var(--pdf-bg,#fff)!important;
+  border-radius:1px;
+  caret-color:#1677ff;
+  text-rendering:geometricPrecision;
+}
+.pdf-fidelity-text:not(:focus):not(:hover){
+  background:color-mix(in srgb,var(--pdf-bg,#fff) 96%,transparent)!important;
+}
+.pdf-fidelity-text:hover{
+  box-shadow:0 0 0 1px rgba(47,125,246,.18);
+}
+.pdf-fidelity-text:focus{
+  box-shadow:0 0 0 1.5px rgba(47,125,246,.55),0 3px 12px rgba(30,90,180,.12);
+  z-index:5;
+}
+.pdf-fidelity-page[data-scanned="true"]::after{
+  content:"Página escaneada · la imagen se conserva; para editar su texto hace falta OCR";
+  position:absolute;left:12px;right:12px;bottom:10px;z-index:4;
+  padding:7px 9px;border-radius:8px;background:rgba(18,24,36,.76);color:#fff;
+  font:600 9px/1.35 Inter,system-ui,sans-serif;backdrop-filter:blur(8px);pointer-events:none;
+}
+
+/* Imported PDFs keep their own page shape rather than inheriting A4/Carta dimensions. */
+.editor-v3.pdf-fidelity-document .editable-surface{width:100%}
+.editor-v3.pdf-fidelity-document .writing-area{align-items:flex-start}
+.editor-v3.pdf-fidelity-document .page-ruler-shell{opacity:.92}
+
+/* Small fidelity badge, no large warning block. */
+.notice.pdf-fidelity-notice{
+  max-width:760px!important;
+  border-radius:11px!important;
+  padding:8px 11px!important;
+  font-size:9.5px!important;
+}
+
+@media(max-width:850px){
+  .library-view .document-grid{width:100%!important;max-width:360px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+  .library-view .document-card{max-width:164px!important}
+  .library-view .doc-cover{width:100%!important;aspect-ratio:0.80!important;border-radius:13px!important;font-size:25px!important}
+  .editor-v3 .pdf-fidelity-page{border-radius:6px!important;margin-bottom:12px!important}
+}
+@media(max-width:480px){
+  .library-view .document-grid{max-width:320px!important}
+  .library-view .document-card{max-width:150px!important}
+  .library-view .doc-cover{aspect-ratio:0.82!important;border-radius:12px!important}
+}
