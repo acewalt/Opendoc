@@ -1,0 +1,35 @@
+name: Wire Waltiva compact editor
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect compact editor assets
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          text = p.read_text(encoding='utf-8')
+          if './editor-compact.css' not in text:
+              text = text.replace('</head>', '  <link rel="stylesheet" href="./editor-compact.css" />\n</head>')
+          if './editor-compact.js' not in text:
+              text = text.replace('</body>', '  <script src="./editor-compact.js"></script>\n</body>')
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git rm .github/workflows/wire-editor-compact.yml
+          git commit -m "Enable compact editor and collapsible panels"
+          git push
