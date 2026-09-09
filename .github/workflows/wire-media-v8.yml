@@ -1,0 +1,33 @@
+name: Wire Waltiva Media V8
+on:
+  push:
+    paths:
+      - '.github/workflows/wire-media-v8.yml'
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect media V8
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          css='  <link rel="stylesheet" href="./media-v8.css" />\n'
+          js='  <script src="./media-v8.js"></script>\n'
+          if './media-v8.css' not in s:
+              s=s.replace('  <link rel="stylesheet" href="./free-transform-v7.css" />\n', '  <link rel="stylesheet" href="./free-transform-v7.css" />\n'+css)
+          if './media-v8.js' not in s:
+              s=s.replace('  <script src="./free-transform-v7.js"></script>\n', '  <script src="./free-transform-v7.js"></script>\n'+js)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "Enable inline image drop and PDF media V8"
+          git push
