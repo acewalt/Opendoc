@@ -1,0 +1,67 @@
+name: Deploy ONLYOFFICE preview
+
+on:
+  push:
+    branches:
+      - onlyoffice-engine
+    paths:
+      - '.github/workflows/deploy-onlyoffice-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout engine source
+        uses: actions/checkout@v4
+        with:
+          ref: onlyoffice-engine
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build engine
+        run: pnpm build
+
+      - name: Checkout current Pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: current-site
+          fetch-depth: 0
+
+      - name: Publish engine under preview path
+        run: |
+          rm -rf current-site/onlyoffice-preview
+          mkdir -p current-site/onlyoffice-preview
+          cp -a html/. current-site/onlyoffice-preview/
+          cat > current-site/onlyoffice-preview/SOURCE.txt <<'TXT'
+          Waltiva ONLYOFFICE engine preview
+          Source branch: onlyoffice-engine
+          Upstream: sweetwisdom/onlyoffice-web-local
+          Upstream commit: c4905016372a633cfba59a78f0acb3f029c85883
+          License: GNU AGPL-3.0
+          TXT
+
+      - name: Commit preview to main
+        working-directory: current-site
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add onlyoffice-preview
+          git commit -m 'Publish ONLYOFFICE engine preview' || exit 0
+          git push origin main
