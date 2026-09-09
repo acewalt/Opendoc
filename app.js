@@ -85,7 +85,7 @@
 
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('opendoc-theme', theme);
+    localStorage.setItem('waltiva-theme', theme);
     const dark = theme === 'dark';
     $('themeToggleLibrary').innerHTML = dark ? '☀ <span>Modo claro</span>' : '☾ <span>Modo noche</span>';
     $('themeToggleEditor').textContent = dark ? '☀' : '☾';
@@ -336,7 +336,7 @@
     }
 
     if (scannedPages === pdf.numPages) {
-      setNotice('Este PDF parece escaneado. Opendoc conserva cada página como imagen, pero el texto interno necesita OCR para convertirse en texto real.');
+      setNotice('Este PDF parece escaneado. Waltiva conserva cada página como imagen, pero el texto interno necesita OCR para convertirse en texto real.');
     } else {
       setNotice('PDF reconstruido para edición: el texto pasa a un documento tipo Word y la pestaña “Vista original” conserva la referencia visual exacta del PDF. Diseños muy complejos pueden requerir ajustes manuales.');
     }
@@ -468,7 +468,7 @@
       if (el.textContent || el.children.length) article.appendChild(el);
     });
     const html = article.innerHTML || '<p><br></p>';
-    appendLegacyPair(html, 'ODT: Opendoc reconstruye el contenido principal para edición. Algunos estilos específicos de LibreOffice pueden variar.');
+    appendLegacyPair(html, 'ODT: Waltiva reconstruye el contenido principal para edición. Algunos estilos específicos de LibreOffice pueden variar.');
   }
 
   function sanitizeHtml(html) {
@@ -643,7 +643,7 @@
   });
   $('themeToggleLibrary').addEventListener('click', toggleTheme);
   $('themeToggleEditor').addEventListener('click', toggleTheme);
-  $('privacyInfo').addEventListener('click', function () { showToast('Tus archivos no se suben a Opendoc.'); });
+  $('privacyInfo').addEventListener('click', function () { showToast('Tus archivos no se suben a Waltiva.'); });
 
   editToggle.addEventListener('click', function () { setEditing(true); });
   viewOriginal.addEventListener('click', showOriginalMode);
@@ -670,13 +670,13 @@
   $('zoomOut').addEventListener('click', function () { setZoom(state.zoom - 0.1); });
   $('zoomIn').addEventListener('click', function () { setZoom(state.zoom + 0.1); });
 
-  documentTitle.addEventListener('input', function () { document.title = (documentTitle.value || 'Opendoc') + ' · Opendoc'; });
+  documentTitle.addEventListener('input', function () { document.title = (documentTitle.value || 'Waltiva') + ' · Waltiva'; });
   editableSurface.addEventListener('input', updateDocumentStats);
   window.addEventListener('beforeunload', revokeUrls);
   document.addEventListener('click', function (e) {
     if (!e.target.closest('#exportMenu') && !e.target.closest('#exportMenuButton')) exportMenu.classList.add('hidden');
   });
 
-  applyTheme(localStorage.getItem('opendoc-theme') || 'light');
+  applyTheme(localStorage.getItem('waltiva-theme') || 'light');
   showView('welcome');
 })();

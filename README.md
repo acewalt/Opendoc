@@ -1,6 +1,6 @@
-# Opendoc
+# Waltiva
 
-Opendoc es un visor/editor de documentos que funciona completamente en el navegador y está pensado para desplegarse en GitHub Pages.
+Waltiva es un visor/editor de documentos que funciona completamente en el navegador y está pensado para desplegarse en GitHub Pages.
 
 ## Funciones actuales
 
