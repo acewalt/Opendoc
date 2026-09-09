@@ -1,0 +1,35 @@
+name: Wire Waltiva Spread V12
+on:
+  push:
+    paths:
+      - 'spread-fix-v12.css'
+      - 'spread-fix-v12.js'
+      - '.github/workflows/wire-spread-v12.yml'
+permissions:
+  contents: write
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect spread fix V12
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          css='  <link rel="stylesheet" href="./spread-fix-v12.css" />\n'
+          js='  <script src="./spread-fix-v12.js"></script>\n'
+          if 'spread-fix-v12.css' not in s:
+              s=s.replace('  <link rel="stylesheet" href="./book-layout-v11.css" />\n', '  <link rel="stylesheet" href="./book-layout-v11.css" />\n'+css)
+          if 'spread-fix-v12.js' not in s:
+              s=s.replace('  <script src="./book-layout-v11.js"></script>\n', '  <script src="./book-layout-v11.js"></script>\n'+js)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit wiring
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git diff --cached --quiet || git commit -m "Fix two-page spread scaling V12"
+          git push
