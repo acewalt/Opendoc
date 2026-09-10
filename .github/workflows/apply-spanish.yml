@@ -1,4 +1,4 @@
-name: Diagnosticar selector de locale compilado
+name: Diagnosticar aplicación del locale compilado
 
 on:
   push:
@@ -12,54 +12,31 @@ jobs:
   inspect-locale-loader:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Mostrar referencias exactas a locales en los bundles originales
+      - uses: actions/checkout@v4
+      - name: Mostrar flujo de carga y aplicación del diccionario
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
 
-          editors = ('documenteditor', 'spreadsheeteditor', 'presentationeditor')
-          for editor in editors:
-              path = Path(f'public/web-apps/apps/{editor}/main/app.js')
-              text = path.read_text(encoding='utf-8')
+          for editor in ('documenteditor', 'spreadsheeteditor', 'presentationeditor'):
+              text = Path(f'public/web-apps/apps/{editor}/main/app.js').read_text(encoding='utf-8')
               print(f'\n===== {editor} =====')
 
-              needles = [
-                  f'{editor}/main/locale/zh.json',
-                  f'{editor}/main/locale/es.json',
-                  'locale/zh.json',
-                  'locale/es.json',
-              ]
-              for needle in needles:
+              req = f'require(["{editor}/main/locale/zh.json"'
+              pos = text.find(req)
+              print('--- bootstrap require y callback ---')
+              print(text[pos:pos+5000] if pos >= 0 else 'NO ENCONTRADO')
+
+              marker = 'Common.Locale=new function()'
+              pos2 = text.find(marker)
+              print('\n--- Common.Locale compilado ---')
+              print(text[pos2:pos2+6500] if pos2 >= 0 else 'NO ENCONTRADO')
+
+              for needle in ('Common.Locale.apply(', '.apply(null,t)', '.apply(null, t)', 'locale.apply(', 'Locale.apply('):
                   positions = [m.start() for m in re.finditer(re.escape(needle), text)]
-                  print(f'{needle!r}: {len(positions)} ocurrencias')
-                  for n, pos in enumerate(positions[:20], 1):
-                      start = max(0, pos - 550)
-                      end = min(len(text), pos + len(needle) + 550)
-                      print(f'--- contexto {n} @ {pos} ---')
-                      print(text[start:end].replace('\n', '\\n'))
-
-              # Referencias de idioma potencialmente compiladas: solo contextos donde aparece zh
-              # cerca de términos lang/locale para evitar inundar el log con traducciones chinas.
-              seen = set()
-              for m in re.finditer(r'(?i)(?:lang|locale)', text):
-                  start = max(0, m.start() - 220)
-                  end = min(len(text), m.start() + 420)
-                  frag = text[start:end]
-                  if re.search(r'(?i)["\']zh(?:[-_]CN)?["\']', frag) and frag not in seen:
-                      seen.add(frag)
-                      print('--- posible hardcode lang/locale+zh ---')
-                      print(frag.replace('\n', '\\n'))
-                      if len(seen) >= 25:
-                          break
-
-              # Dependencias AMD que mencionen cualquier locale.
-              for m in re.finditer(r'define\([^\n]{0,2000}?locale/[^\n]{0,2000}?\)', text):
-                  frag = m.group(0)
-                  if len(frag) <= 4000:
-                      print('--- define con locale ---')
-                      print(frag[:4000])
+                  if positions:
+                      print(f'\n{needle}: {positions}')
+                      for p in positions[:10]:
+                          print(text[max(0,p-500):p+1000])
           PY
