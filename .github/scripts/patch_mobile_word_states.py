@@ -24,7 +24,9 @@ def rep(old: str, new: str, label: str):
 
 def sub(pattern: str, replacement: str, label: str, flags=0):
     global s
-    s2, count = re.subn(pattern, replacement, s, count=1, flags=flags)
+    # A callable replacement is deliberate: the injected JavaScript contains
+    # regex literals such as \d and \s, which must not be interpreted by re.sub.
+    s2, count = re.subn(pattern, lambda _match: replacement, s, count=1, flags=flags)
     if count != 1:
         raise SystemExit(f'{label}: expected 1 match, got {count}')
     s = s2
@@ -302,9 +304,6 @@ replacements = {
 
 for old, new in replacements.items():
     rep(old, new, old.strip().split(':', 1)[0])
-
-# Exact zoom button IDs are kept as a fallback for the explicit fit/status controls.
-# Pinch itself no longer relies on these hidden DOM controls.
 
 path.write_text(s, encoding='utf-8')
 print('Mobile UX v3 applied successfully')
