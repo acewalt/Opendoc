@@ -1,25 +1,5 @@
 <template>
     <div class="editor-container" v-loaing="loading" element-loading-text="Cargando...">
-        <div v-if="isWordDocument" class="math-view-toolbar">
-            <button
-                type="button"
-                class="math-view-toggle"
-                :class="{ active: viewMath }"
-                role="switch"
-                :aria-checked="viewMath"
-                @click="toggleMathView"
-            >
-                <span class="math-view-icon">√x</span>
-                <span>Vista matemática</span>
-                <span class="switch-track" aria-hidden="true">
-                    <span class="switch-knob"></span>
-                </span>
-            </button>
-            <span v-if="viewMath" class="math-view-status">
-                Selecciona una expresión en el documento para previsualizarla.
-            </span>
-        </div>
-
         <div id="iframe"></div>
 
         <aside v-if="isWordDocument && viewMath" class="math-preview" aria-live="polite">
@@ -84,6 +64,9 @@ const media: { [key: string]: string } = {}
 
 let stopFileWatch: (() => void) | null = null
 let mathSelectionTimer: ReturnType<typeof setInterval> | null = null
+let mathRibbonInstallTimer: ReturnType<typeof setTimeout> | null = null
+let mathRibbonButton: HTMLButtonElement | null = null
+let mathRibbonSlot: HTMLElement | null = null
 
 const currentFileType = computed(() => props.file.fileName.split('.').pop()?.toLowerCase() || '')
 const isWordDocument = computed(() => getDocumentType(currentFileType.value) === 'word')
@@ -106,6 +89,7 @@ onMounted(async () => {
                     mathSource.value = ''
                     mathExportNotice.value = ''
                     stopMathSelectionTracking()
+                    removeMathRibbonControl()
                     await openFile()
                 } catch (error) {
                     console.error('Error al abrir el archivo:', error)
@@ -122,6 +106,7 @@ onMounted(async () => {
 
 watch(viewMath, (enabled) => {
     mathExportNotice.value = ''
+    syncMathRibbonControl()
     if (enabled && isWordDocument.value) startMathSelectionTracking()
     else stopMathSelectionTracking()
 })
@@ -164,6 +149,8 @@ function createEditorInstance(config: {
     binData: ArrayBuffer
     media?: any
 }) {
+    removeMathRibbonControl()
+
     if (editor.value) {
         editor.value.destroyEditor()
         editor.value = null
@@ -217,7 +204,10 @@ function createEditorInstance(config: {
             },
             onDocumentReady: () => {
                 console.log('Documento cargado:', fileName)
-                if (viewMath.value && documentType === 'word') startMathSelectionTracking()
+                if (documentType === 'word') {
+                    installMathRibbonControl()
+                    if (viewMath.value) startMathSelectionTracking()
+                }
             },
             onSave: handleSaveDocument,
             writeFile: handleWriteFile,
@@ -238,11 +228,25 @@ function toggleMathView(): void {
     viewMath.value = !viewMath.value
 }
 
+function getOnlyOfficeFrame(): HTMLIFrameElement | null {
+    return (
+        (document.querySelector('iframe[name="frameEditor"]') as HTMLIFrameElement | null) ||
+        (document.getElementById('iframe')?.querySelector('iframe') as HTMLIFrameElement | null)
+    )
+}
+
+function getOnlyOfficeDocument(): Document | null {
+    try {
+        return getOnlyOfficeFrame()?.contentDocument || null
+    } catch (error) {
+        console.debug('Vista matemática: no se pudo acceder al documento interno de ONLYOFFICE.', error)
+        return null
+    }
+}
+
 function getOnlyOfficeWordApi(): any | null {
     try {
-        const host = document.getElementById('iframe')
-        const frame = host?.querySelector('iframe') as HTMLIFrameElement | null
-        const frameWindow = frame?.contentWindow as any
+        const frameWindow = getOnlyOfficeFrame()?.contentWindow as any
         if (!frameWindow) return null
 
         return (
@@ -256,6 +260,186 @@ function getOnlyOfficeWordApi(): any | null {
         console.debug('Vista matemática: la API interna aún no está disponible.', error)
         return null
     }
+}
+
+function installMathRibbonControl(attempt = 0): void {
+    if (!isWordDocument.value) return
+
+    const doc = getOnlyOfficeDocument()
+    const pageColorSlot = doc?.getElementById('slot-btn-pagecolor')
+
+    if (!doc || !pageColorSlot) {
+        if (attempt < 40) {
+            if (mathRibbonInstallTimer) clearTimeout(mathRibbonInstallTimer)
+            mathRibbonInstallTimer = setTimeout(() => installMathRibbonControl(attempt + 1), 250)
+        }
+        return
+    }
+
+    const existing = doc.getElementById('waltiva-math-view-toggle') as HTMLButtonElement | null
+    if (existing) {
+        mathRibbonButton = existing
+        mathRibbonSlot = existing.closest('#waltiva-math-view-slot') as HTMLElement | null
+        syncMathRibbonControl()
+        return
+    }
+
+    if (!doc.getElementById('waltiva-math-view-style')) {
+        const style = doc.createElement('style')
+        style.id = 'waltiva-math-view-style'
+        style.textContent = `
+            #waltiva-math-view-slot {
+                display: inline-flex !important;
+                width: 88px !important;
+                min-width: 88px !important;
+                height: 64px !important;
+                vertical-align: top !important;
+                align-items: stretch !important;
+            }
+            #waltiva-math-view-toggle {
+                box-sizing: border-box !important;
+                width: 84px !important;
+                min-width: 84px !important;
+                height: 62px !important;
+                margin: 0 2px !important;
+                padding: 4px 4px 3px !important;
+                border: 0 !important;
+                border-radius: 3px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 2px !important;
+                color: var(--text-normal, #d8d8d8) !important;
+                background: transparent !important;
+                cursor: pointer !important;
+                font: inherit !important;
+                line-height: 1 !important;
+            }
+            #waltiva-math-view-toggle:hover {
+                background: var(--highlight-button-hover, rgba(255,255,255,.08)) !important;
+            }
+            #waltiva-math-view-toggle.active {
+                background: var(--highlight-button-pressed, rgba(255,255,255,.12)) !important;
+            }
+            #waltiva-math-view-toggle .waltiva-math-icon {
+                display: block;
+                height: 19px;
+                font-family: "Cambria Math", "STIX Two Math", serif;
+                font-size: 18px;
+                line-height: 19px;
+            }
+            #waltiva-math-view-toggle .waltiva-math-caption {
+                display: block;
+                max-width: 80px;
+                overflow: hidden;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                font-size: 11px;
+                line-height: 13px;
+            }
+            #waltiva-math-view-toggle .waltiva-math-switch {
+                position: relative;
+                display: block;
+                width: 24px;
+                height: 12px;
+                border-radius: 999px;
+                background: #666;
+                transition: background .15s ease;
+            }
+            #waltiva-math-view-toggle .waltiva-math-switch > span {
+                position: absolute;
+                top: 2px;
+                left: 2px;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #fff;
+                transition: transform .15s ease;
+            }
+            #waltiva-math-view-toggle.active .waltiva-math-switch {
+                background: #4f78b8;
+            }
+            #waltiva-math-view-toggle.active .waltiva-math-switch > span {
+                transform: translateX(12px);
+            }
+            @media (max-width: 600px) {
+                #waltiva-math-view-slot {
+                    width: 74px !important;
+                    min-width: 74px !important;
+                }
+                #waltiva-math-view-toggle {
+                    width: 70px !important;
+                    min-width: 70px !important;
+                }
+                #waltiva-math-view-toggle .waltiva-math-caption {
+                    font-size: 10px;
+                }
+            }
+        `
+        doc.head.appendChild(style)
+    }
+
+    const slot = doc.createElement('span')
+    slot.id = 'waltiva-math-view-slot'
+    slot.className = 'btn-slot text x-huge'
+
+    const button = doc.createElement('button')
+    button.id = 'waltiva-math-view-toggle'
+    button.type = 'button'
+    button.className = 'btn btn-toolbar x-huge icon-top'
+    button.setAttribute('role', 'switch')
+    button.setAttribute('aria-label', 'Vista matemática')
+    button.innerHTML = `
+        <span class="waltiva-math-icon" aria-hidden="true">√x</span>
+        <span class="waltiva-math-caption">Vista matemática</span>
+        <span class="waltiva-math-switch" aria-hidden="true"><span></span></span>
+    `
+    button.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        toggleMathView()
+    })
+
+    slot.appendChild(button)
+
+    const designGroup = pageColorSlot.closest('.group') || pageColorSlot.parentElement
+    if (!designGroup) return
+    designGroup.appendChild(slot)
+
+    mathRibbonSlot = slot
+    mathRibbonButton = button
+    syncMathRibbonControl()
+}
+
+function syncMathRibbonControl(): void {
+    if (!mathRibbonButton || !mathRibbonButton.isConnected) return
+
+    const enabled = viewMath.value
+    mathRibbonButton.classList.toggle('active', enabled)
+    mathRibbonButton.setAttribute('aria-checked', String(enabled))
+    mathRibbonButton.setAttribute(
+        'title',
+        enabled ? 'Desactivar Vista matemática' : 'Activar Vista matemática',
+    )
+}
+
+function removeMathRibbonControl(): void {
+    if (mathRibbonInstallTimer) {
+        clearTimeout(mathRibbonInstallTimer)
+        mathRibbonInstallTimer = null
+    }
+
+    try {
+        mathRibbonSlot?.remove()
+        getOnlyOfficeDocument()?.getElementById('waltiva-math-view-slot')?.remove()
+        getOnlyOfficeDocument()?.getElementById('waltiva-math-view-style')?.remove()
+    } catch (error) {
+        console.debug('Vista matemática: no se pudo retirar el control del ribbon.', error)
+    }
+
+    mathRibbonButton = null
+    mathRibbonSlot = null
 }
 
 function refreshSelectedMath(): void {
@@ -420,6 +604,7 @@ function getMimeTypeFromExtension(extension: string): string {
 onBeforeUnmount(() => {
     stopFileWatch?.()
     stopMathSelectionTracking()
+    removeMathRibbonControl()
 
     Object.values(media).forEach((url) => {
         if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url)
@@ -448,91 +633,9 @@ onBeforeUnmount(() => {
     width: 100%;
 }
 
-.math-view-toolbar {
-    flex: 0 0 38px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 5px 10px;
-    color: #d7d7d7;
-    background: #191919;
-    border-bottom: 1px solid #303030;
-    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 12px;
-    z-index: 20;
-}
-
-.math-view-toggle {
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 9px;
-    border: 1px solid #3a3a3a;
-    border-radius: 7px;
-    color: #d8d8d8;
-    background: #242424;
-    cursor: pointer;
-    font: inherit;
-    transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.math-view-toggle:hover {
-    background: #2c2c2c;
-    border-color: #4a4a4a;
-}
-
-.math-view-toggle.active {
-    color: #ffffff;
-    background: #2c3340;
-    border-color: #4b6487;
-}
-
-.math-view-icon {
-    font-family: 'Cambria Math', 'STIX Two Math', serif;
-    font-size: 14px;
-    line-height: 1;
-}
-
-.switch-track {
-    position: relative;
-    width: 25px;
-    height: 14px;
-    margin-left: 2px;
-    border-radius: 999px;
-    background: #555;
-    transition: background 0.15s ease;
-}
-
-.switch-knob {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.15s ease;
-}
-
-.math-view-toggle.active .switch-track {
-    background: #4f78b8;
-}
-
-.math-view-toggle.active .switch-knob {
-    transform: translateX(11px);
-}
-
-.math-view-status {
-    color: #929292;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
 .math-preview {
     position: absolute;
-    top: 50px;
+    top: 12px;
     right: 14px;
     width: min(390px, calc(100vw - 28px));
     padding: 12px;
@@ -659,11 +762,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 700px) {
-    .math-view-status {
-        display: none;
-    }
-
     .math-preview {
+        top: 8px;
         right: 8px;
         width: calc(100vw - 16px);
     }
