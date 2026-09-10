@@ -99,7 +99,7 @@ async function initFileUrl() {
   }
   const laodingInstance = ElLoading.service({
     lock: true,
-    text: 'Loading',
+    text: 'Cargando...',
     background: 'rgba(0, 0, 0, 0.7)',
   })
   try {

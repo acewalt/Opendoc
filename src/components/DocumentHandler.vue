@@ -35,7 +35,7 @@ onMounted(async () => {
         // 加载编辑器API
         await loadEditorApi()
         await initX2T()
-        console.log('app has loading')
+        console.log('Editor cargado')
         loading.value = false
         // 页面初始化后，使用 watchEffect 监听 props.file 并执行 openFile
         // 添加props.file监听
@@ -46,7 +46,7 @@ onMounted(async () => {
                 try {
                     await openFile()
                 } catch (error) {
-                    console.error('Error opening file:', error)
+                    console.error('Error al abrir el archivo:', error)
                     alert('No se pudo abrir el archivo. Comprueba su formato.')
                 }
             },
@@ -56,7 +56,7 @@ onMounted(async () => {
         // 组件卸载时停止监听
         onBeforeUnmount(stopWatch)
     } catch (error) {
-        console.error('Failed to initialize editor:', error)
+        console.error('Error al inicializar el editor:', error)
         // 错误已在各函数中处理
     }
 })
@@ -204,7 +204,7 @@ function loadEditorApi(): Promise<void> {
         script.src = './web-apps/apps/api/documents/api.js'
         script.onload = () => resolve()
         script.onerror = (error) => {
-            console.error('Failed to load OnlyOffice API:', error)
+            console.error('No se pudo cargar la API de ONLYOFFICE:', error)
             alert('No se pudo cargar el editor. Comprueba que la API de ONLYOFFICE esté disponible.')
             reject(error)
         }
@@ -220,7 +220,7 @@ interface SaveEvent {
 }
 
 async function handleSaveDocument(event: SaveEvent) {
-    console.log('Save document event:', event)
+    console.log('Evento de guardado del documento:', event)
 
     if (event.data && event.data.data) {
         const { data, option } = event.data
@@ -266,11 +266,11 @@ function dataURItoBlob(dataURI: string): Blob {
 function handleWriteFile(event: any) {
     debugger
     try {
-        console.log('Write file event:', event)
+        console.log('Evento de escritura del archivo:', event)
 
         const { data: eventData } = event
         if (!eventData) {
-            console.warn('No data provided in writeFile event')
+            console.warn('El evento de escritura no contiene datos')
             return
         }
 
@@ -282,11 +282,11 @@ function handleWriteFile(event: any) {
 
         // 验证数据
         if (!imageData || !(imageData instanceof Uint8Array)) {
-            throw new Error('Invalid image data: expected Uint8Array')
+            throw new Error('Datos de imagen no válidos: se esperaba Uint8Array')
         }
 
         if (!fileName || typeof fileName !== 'string') {
-            throw new Error('Invalid file name')
+            throw new Error('Nombre de archivo no válido')
         }
 
         // 从文件名中提取扩展名
@@ -319,7 +319,7 @@ function handleWriteFile(event: any) {
         })
         console.log(`Successfully processed image: ${fileName}, URL: ${media}`)
     } catch (error) {
-        console.error('Error handling writeFile:', error)
+        console.error('Error al procesar la escritura del archivo:', error)
 
         // 通知编辑器文件处理失败
         if (editor.value && typeof editor.value.sendCommand === 'function') {
