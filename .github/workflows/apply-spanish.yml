@@ -1,0 +1,157 @@
+name: Aplicar traducción española a ONLYOFFICE
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-spanish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sustituir solo los diccionarios internos
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re, urllib.request, gzip
+
+          BASE = 'https://raw.githubusercontent.com/ONLYOFFICE/web-apps/master/apps'
+          editors = {
+              'documenteditor': Path('public/web-apps/apps/documenteditor/main/app.js'),
+              'spreadsheeteditor': Path('public/web-apps/apps/spreadsheeteditor/main/app.js'),
+              'presentationeditor': Path('public/web-apps/apps/presentationeditor/main/app.js'),
+          }
+
+          def download_json(url):
+              req = urllib.request.Request(url, headers={'User-Agent':'Waltiva-localization'})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return json.loads(r.read().decode('utf-8-sig'))
+
+          def find_object_end(text, start):
+              depth = 0
+              in_str = False
+              esc = False
+              for i in range(start, len(text)):
+                  ch = text[i]
+                  if in_str:
+                      if esc:
+                          esc = False
+                      elif ch == '\\':
+                          esc = True
+                      elif ch == '"':
+                          in_str = False
+                      continue
+                  if ch == '"':
+                      in_str = True
+                  elif ch == '{':
+                      depth += 1
+                  elif ch == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return i
+              raise RuntimeError('No se encontró el final del objeto JSON')
+
+          cjk = re.compile(r'[\u3400-\u9fff]')
+          report = []
+
+          for editor, path in editors.items():
+              text = path.read_text(encoding='utf-8')
+              module = f'{editor}/main/locale/zh.json'
+              needle = f'define("{module}",'
+              pos = text.find(needle)
+              if pos < 0:
+                  raise RuntimeError(f'No se encontró el módulo {module} en {path}')
+              start = text.find('{', pos + len(needle))
+              end = find_object_end(text, start)
+              old = json.loads(text[start:end+1])
+
+              es = download_json(f'{BASE}/{editor}/main/locale/es.json')
+              en = download_json(f'{BASE}/{editor}/main/locale/en.json')
+
+              translated = {}
+              es_count = en_count = key_count = 0
+              for key, value in old.items():
+                  if key in es:
+                      translated[key] = es[key]
+                      es_count += 1
+                  elif key in en:
+                      translated[key] = en[key]
+                      en_count += 1
+                  else:
+                      translated[key] = key.rsplit('.', 1)[-1]
+                      key_count += 1
+
+              payload = json.dumps(translated, ensure_ascii=False, separators=(',', ':'))
+              if cjk.search(payload):
+                  raise RuntimeError(f'Persisten caracteres chinos en el diccionario de {editor}')
+
+              patched = text[:start] + payload + text[end+1:]
+              path.write_text(patched, encoding='utf-8')
+              gz = path.with_suffix(path.suffix + '.gz')
+              gz.write_bytes(gzip.compress(patched.encode('utf-8'), compresslevel=9, mtime=0))
+              report.append((editor, len(old), es_count, en_count, key_count))
+
+          # Fórmulas de Spreadsheet: conservar tanto alias zh como es para que funcione
+          # independientemente de si esta build antigua usa el locale fijo o el configurado.
+          formula_dir = Path('public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang')
+          for name in ('es.json', 'es_desc.json'):
+              url = f'{BASE}/spreadsheeteditor/main/resources/formula-lang/{name}'
+              req = urllib.request.Request(url, headers={'User-Agent':'Waltiva-localization'})
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  raw = r.read()
+              (formula_dir / name).write_bytes(raw)
+              zh_name = 'zh.json' if name == 'es.json' else 'zh_desc.json'
+              (formula_dir / zh_name).write_bytes(raw)
+              (formula_dir / (zh_name + '.gz')).write_bytes(gzip.compress(raw, compresslevel=9, mtime=0))
+
+          # Terminar la traducción de las cadenas propias del wrapper sin tocar su arquitectura.
+          p = Path('src/components/DocumentHandler.vue')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("id: '用户ID'", "id: 'local-user'")
+          s = s.replace("name: '用户名'", "name: 'Usuario local'")
+          s = s.replace("console.log('app has loading')", "console.log('Editor cargado')")
+          s = s.replace("console.error('Failed to initialize editor:', error)", "console.error('Error al inicializar el editor:', error)")
+          s = s.replace("console.error('Error opening file:', error)", "console.error('Error al abrir el archivo:', error)")
+          s = s.replace("console.error('Failed to load OnlyOffice API:', error)", "console.error('No se pudo cargar la API de ONLYOFFICE:', error)")
+          s = s.replace("console.log('Save document event:', event)", "console.log('Evento de guardado:', event)")
+          s = s.replace("console.log('Write file event:', event)", "console.log('Evento de escritura de archivo:', event)")
+          s = s.replace("console.warn('No data provided in writeFile event')", "console.warn('El evento de escritura no contiene datos')")
+          s = s.replace("throw new Error('Invalid image data: expected Uint8Array')", "throw new Error('Datos de imagen no válidos: se esperaba Uint8Array')")
+          s = s.replace("throw new Error('Invalid file name')", "throw new Error('Nombre de archivo no válido')")
+          s = s.replace("console.error('Error handling writeFile:', error)", "console.error('Error al procesar la escritura del archivo:', error)")
+          p.write_text(s, encoding='utf-8')
+
+          print('RESUMEN DE TRADUCCIÓN')
+          for row in report:
+              print('%s: claves=%d español=%d fallback-inglés=%d fallback-clave=%d' % row)
+          PY
+
+      - name: Verificar que los tres bundles siguen siendo JavaScript y no contienen locale chino
+        run: |
+          node --check public/web-apps/apps/documenteditor/main/app.js
+          node --check public/web-apps/apps/spreadsheeteditor/main/app.js
+          node --check public/web-apps/apps/presentationeditor/main/app.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          for editor in ('documenteditor','spreadsheeteditor','presentationeditor'):
+              p=Path(f'public/web-apps/apps/{editor}/main/app.js')
+              s=p.read_text(encoding='utf-8')
+              needle=f'define("{editor}/main/locale/zh.json",'
+              assert needle in s, f'Módulo locale no encontrado: {editor}'
+          print('Los tres bundles conservan su estructura de módulos.')
+          PY
+
+      - name: Commit
+        run: |
+          git config user.name 'walt_to_art'
+          git config user.email 'guard.mauricio.save@gmail.com'
+          git add public/web-apps src/components/DocumentHandler.vue
+          git commit -m 'Traducir internamente ONLYOFFICE al español sin alterar el motor'
+          git push origin main
