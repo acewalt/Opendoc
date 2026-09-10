@@ -25,7 +25,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Validar Diseño y carga en WebKit
+      - name: Validar control en Diseño y carga en WebKit
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
@@ -41,6 +41,21 @@ jobs:
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
             await page.waitForFunction(() => document.querySelector('iframe[name="frameEditor"]'), null, { timeout: 120000 });
+            await page.waitForFunction(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"]');
+              return !!frame?.contentDocument?.querySelector('#waltiva-math-view-toggle');
+            }, null, { timeout: 120000 });
+          }
+
+          async function activateDesign(page) {
+            return page.evaluate(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"]');
+              const doc = frame?.contentDocument;
+              if (!doc) return false;
+              const tab = [...doc.querySelectorAll('li.ribtab')].find(el => (el.textContent || '').trim() === 'Diseño');
+              tab?.querySelector('a')?.click();
+              return !!tab;
+            });
           }
 
           (async () => {
@@ -48,26 +63,39 @@ jobs:
               const browser = await chromium.launch({ headless: true });
               const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
               await openDocument(page);
-              await page.waitForTimeout(8000);
-              const design = await page.evaluate(() => {
+              assert.equal(await page.locator('.math-view-toolbar').count(), 0, 'La barra matemática externa sigue presente');
+              assert.ok(await activateDesign(page), 'No se encontró la pestaña Diseño');
+              await page.waitForTimeout(500);
+
+              const before = await page.evaluate(() => {
                 const frame = document.querySelector('iframe[name="frameEditor"]');
                 const doc = frame?.contentDocument;
-                if (!doc) return { error: 'no frame doc' };
-                const tab = [...doc.querySelectorAll('li.ribtab')].find(el => (el.textContent || '').trim() === 'Diseño');
-                tab?.querySelector('a')?.click();
-                const isVisible = el => {
-                  const cs = getComputedStyle(el), r = el.getBoundingClientRect();
-                  return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+                const button = doc?.querySelector('#waltiva-math-view-toggle');
+                if (!button) return null;
+                const rect = button.getBoundingClientRect();
+                return {
+                  checked: button.getAttribute('aria-checked'),
+                  visible: rect.width > 0 && rect.height > 0 && getComputedStyle(button).display !== 'none',
+                  inDesignGroup: !!button.closest('.group')?.querySelector('#slot-btn-pagecolor'),
                 };
-                const candidates = [...doc.querySelectorAll('.toolbar [id], .toolbar [class], #viewport [id]')]
-                  .filter(isVisible)
-                  .map(el => ({ tag: el.tagName, id: el.id || '', cls: typeof el.className === 'string' ? el.className : '', text: (el.textContent || '').trim().replace(/\s+/g,' ').slice(0,100) }))
-                  .filter(x => /design|layout|theme|color|water|page|toolbar|tab/i.test(`${x.id} ${x.cls} ${x.text}`))
-                  .slice(0,120);
-                return { tabFound: !!tab, candidates };
               });
-              console.log('DESIGN_CONTENT=' + JSON.stringify(design, null, 2));
-              assert.ok(design.tabFound);
+              console.log('MATH_RIBBON_BEFORE=' + JSON.stringify(before));
+              assert.ok(before?.visible, 'El control Vista matemática no está visible en Diseño');
+              assert.ok(before?.inDesignGroup, 'El control no quedó dentro del grupo de Diseño');
+              assert.equal(before?.checked, 'false');
+
+              await page.evaluate(() => {
+                const frame = document.querySelector('iframe[name="frameEditor"]');
+                frame?.contentDocument?.querySelector('#waltiva-math-view-toggle')?.click();
+              });
+              await page.locator('.math-preview').waitFor({ state: 'visible', timeout: 5000 });
+
+              const after = await page.evaluate(() => {
+                const frame = document.querySelector('iframe[name="frameEditor"]');
+                const button = frame?.contentDocument?.querySelector('#waltiva-math-view-toggle');
+                return button?.getAttribute('aria-checked');
+              });
+              assert.equal(after, 'true', 'El booleano no cambió a activo');
               await browser.close();
             }
 
@@ -79,16 +107,24 @@ jobs:
               page.on('pageerror', err => pageErrors.push(String(err)));
               await openDocument(page);
               await page.waitForTimeout(30000);
+              await activateDesign(page);
               const state = await page.evaluate(() => {
                 const frame = document.querySelector('iframe[name="frameEditor"]');
                 const doc = frame?.contentDocument;
                 const text = (doc?.body?.innerText || '').replace(/\s+/g, ' ');
-                return { text: text.slice(0,800), loading: text.includes('Cargando documento'), hasCanvas: !!doc?.querySelector('canvas') };
+                const button = doc?.querySelector('#waltiva-math-view-toggle');
+                return {
+                  text: text.slice(0,800),
+                  loading: text.includes('Cargando documento'),
+                  hasCanvas: !!doc?.querySelector('canvas'),
+                  hasMathToggle: !!button,
+                };
               });
               console.log('IPHONE_WEBKIT=' + JSON.stringify({ state, pageErrors }, null, 2));
               assert.ok(!pageErrors.some(x => x.includes('requestIdleCallback')), 'requestIdleCallback sigue fallando');
               assert.equal(state.loading, false, 'ONLYOFFICE sigue atascado en Cargando documento');
               assert.ok(state.hasCanvas, 'No se creó el canvas del documento');
+              assert.ok(state.hasMathToggle, 'Vista matemática no se inyectó en Diseño en WebKit');
               await browser.close();
             }
           })().catch(error => { console.error(error); process.exit(1); });
