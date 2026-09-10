@@ -2,19 +2,16 @@
   'use strict';
 
   const DB_NAME = 'waltiva-local-files';
-  const DB_VERSION = 1;
-  const STORE = 'recent';
+  const DB_VERSION = 2;
+  const RECENT_STORE = 'recent';
+  const LAUNCH_STORE = 'launch';
   const MAX_RECENTS = 10;
   const MAX_STORED_BYTES = 20 * 1024 * 1024;
   const SUPPORTED = new Set(['docx','xlsx','pptx','doc','xls','ppt','odt','ods','odp','pdf','txt','rtf','csv']);
 
   const $ = (id) => document.getElementById(id);
-  const libraryView = $('libraryView');
-  const officeView = $('officeView');
-  const officeFrame = $('officeFrame');
   const modal = $('newDocumentModal');
   const filePicker = $('filePicker');
-  let pendingFile = null;
 
   function extOf(name) {
     const i = String(name || '').lastIndexOf('.');
@@ -32,7 +29,7 @@
     el.textContent = message;
     el.classList.remove('hidden');
     clearTimeout(toast.timer);
-    toast.timer = setTimeout(() => el.classList.add('hidden'), 2800);
+    toast.timer = setTimeout(() => el.classList.add('hidden'), 3200);
   }
 
   function setTheme(theme) {
@@ -57,44 +54,33 @@
 
   function hideModal() {
     modal.classList.add('hidden');
-    if (officeView.classList.contains('hidden')) document.body.style.overflow = '';
+    document.body.style.overflow = '';
   }
 
-  function showOffice() {
-    libraryView.classList.add('hidden');
-    officeView.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
+  function editorUrl(params) {
+    const query = new URLSearchParams({ ...params, fromWaltiva: '1', v: 'launcher3' });
+    return './onlyoffice-preview/?' + query.toString() + '#/';
   }
 
   function openNew(type) {
-    pendingFile = null;
     hideModal();
-    showOffice();
-    officeFrame.src = './onlyoffice-preview/?embed=1&type=' + encodeURIComponent(type) + '&v=workspace2#/';
+    window.location.href = editorUrl({ type: type });
   }
 
   async function openFile(file) {
     if (!file || !SUPPORTED.has(extOf(file.name))) {
-      toast('Ese formato todavía no está conectado al nuevo editor.');
+      toast('Ese formato todavía no está conectado al editor de Waltiva.');
       return;
     }
 
-    await putRecent(file);
-    await renderRecents();
-    pendingFile = file;
-    hideModal();
-    showOffice();
-    officeFrame.src = './onlyoffice-preview/?embed=1&wait=1&v=workspace2#/';
-  }
-
-  function closeOffice() {
-    pendingFile = null;
-    officeFrame.src = 'about:blank';
-    officeView.classList.add('hidden');
-    libraryView.classList.remove('hidden');
-    document.body.style.overflow = '';
-    window.scrollTo({ top: 0, behavior: 'auto' });
-    void renderRecents();
+    try {
+      await putRecent(file);
+      const launchId = await putLaunch(file);
+      window.location.href = editorUrl({ openId: launchId });
+    } catch (error) {
+      console.error('[Waltiva] No se pudo preparar el archivo:', error);
+      toast('No se pudo preparar el archivo para el editor. Comprueba el almacenamiento del navegador e inténtalo de nuevo.');
+    }
   }
 
   function chooseFile() {
@@ -108,14 +94,45 @@
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
         const db = req.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          const store = db.createObjectStore(STORE, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(RECENT_STORE)) {
+          const store = db.createObjectStore(RECENT_STORE, { keyPath: 'id' });
           store.createIndex('lastOpened', 'lastOpened');
+        }
+        if (!db.objectStoreNames.contains(LAUNCH_STORE)) {
+          db.createObjectStore(LAUNCH_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
+      req.onblocked = () => reject(new Error('La base local está bloqueada por otra pestaña de Waltiva.'));
     });
+  }
+
+  async function putLaunch(file) {
+    const db = await openDb();
+    const id = 'launch-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    const record = {
+      id,
+      name: file.name,
+      type: file.type || '',
+      size: file.size,
+      lastModified: file.lastModified || Date.now(),
+      createdAt: Date.now(),
+      blob: file,
+    };
+
+    try {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(LAUNCH_STORE, 'readwrite');
+        tx.objectStore(LAUNCH_STORE).put(record);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error('No se pudo guardar el archivo temporal.'));
+      });
+      return id;
+    } finally {
+      db.close();
+    }
   }
 
   async function putRecent(file) {
@@ -133,8 +150,8 @@
         reopenable: file.size <= MAX_STORED_BYTES,
       };
       await new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).put(record);
+        const tx = db.transaction(RECENT_STORE, 'readwrite');
+        tx.objectStore(RECENT_STORE).put(record);
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
@@ -149,7 +166,7 @@
     try {
       const db = await openDb();
       const records = await new Promise((resolve, reject) => {
-        const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+        const req = db.transaction(RECENT_STORE, 'readonly').objectStore(RECENT_STORE).getAll();
         req.onsuccess = () => resolve(req.result || []);
         req.onerror = () => reject(req.error);
       });
@@ -165,8 +182,8 @@
     if (records.length <= MAX_RECENTS) return;
     const db = await openDb();
     await new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      records.slice(MAX_RECENTS).forEach((record) => tx.objectStore(STORE).delete(record.id));
+      const tx = db.transaction(RECENT_STORE, 'readwrite');
+      records.slice(MAX_RECENTS).forEach((record) => tx.objectStore(RECENT_STORE).delete(record.id));
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
@@ -177,8 +194,8 @@
     try {
       const db = await openDb();
       await new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE, 'readwrite');
-        tx.objectStore(STORE).clear();
+        const tx = db.transaction(RECENT_STORE, 'readwrite');
+        tx.objectStore(RECENT_STORE).clear();
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error);
       });
@@ -251,8 +268,7 @@
       $('recentFilesSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     $('clearRecentFiles').addEventListener('click', () => void clearRecents());
-    $('backToWorkspace').addEventListener('click', closeOffice);
-    $('privacyInfo').addEventListener('click', () => toast('Los documentos se abren en el navegador; Waltiva no los envía a un servidor propio.'));
+    $('privacyInfo').addEventListener('click', () => toast('Los documentos se procesan en el navegador; Waltiva no los envía a un servidor propio.'));
     filePicker.addEventListener('change', () => {
       const file = filePicker.files && filePicker.files[0];
       if (file) void openFile(file);
@@ -261,18 +277,6 @@
       if (event.key === 'Escape' && !modal.classList.contains('hidden')) hideModal();
     });
   }
-
-  window.addEventListener('message', (event) => {
-    if (event.origin !== window.location.origin || event.source !== officeFrame.contentWindow) return;
-    const payload = event.data || {};
-    if (payload.type === 'waltiva-editor-ready' && pendingFile) {
-      officeFrame.contentWindow.postMessage({ type: 'waltiva-open-file', file: pendingFile }, window.location.origin);
-      pendingFile = null;
-    }
-    if (payload.type === 'waltiva-editor-error') {
-      toast(payload.message || 'No se pudo abrir el documento.');
-    }
-  });
 
   initTheme();
   wireUi();
