@@ -3,7 +3,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 /* Waltiva Mobile UI -------------------------------------------------------
  * Capa de interfaz responsive sobre ONLYOFFICE. Mantiene el motor y los
  * comandos originales, pero evita comprimir el ribbon de escritorio en iOS.
- * Waltiva Mobile UX v3: acciones nativas, teclado persistente y pinch zoom continuo.
+ * Waltiva Mobile UX v3.1: acciones nativas verificadas, teclado persistente y pinch zoom continuo.
  */
 (function () {
     'use strict'
@@ -140,7 +140,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 
     function getButtonFromElement(el) {
         if (!el) return null
-        if (/^(BUTTON|A)$/.test(el.tagName) || el.getAttribute('role') === 'button') return el
+        if (/^(BUTTON|A|INPUT)$/.test(el.tagName) || el.getAttribute('role') === 'button') return el
         return el.closest('button,a,[role="button"]') || el.querySelector('button,a,[role="button"]')
     }
 
@@ -232,7 +232,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             sheetRow('image', icons.image, 'Imágenes de archivo', '', true),
             sheetRow('image', icons.image, 'Imágenes en línea', '', true),
             sheetRow('link', icons.link, 'Vínculo', '', true),
-            sheetRow('comment', icons.comment, 'Comentario', '', true),
+            sheetRow('add-comment', icons.comment, 'Comentario', '', true),
             sheetRow('equation', icons.equation, 'Ecuación', '', true),
             sheetRow('page', icons.page, 'Página / salto de página', '', true),
             sheetRow('table', icons.table, 'Tabla', '', true),
@@ -558,19 +558,20 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             case 'bullets': ok = runNativeEditorAction('bullets') || clickControl(['#id-toolbar-btn-markers', '.toolbar .btn-setmarkers', '.btn-setmarkers', '[title*="Viñetas"]', '[title*="Bullets"]']); restoreEditingFocus(keyboardWasOpen); break
             case 'numbering': ok = runNativeEditorAction('numbering') || clickControl(['#id-toolbar-btn-numbering', '.toolbar .btn-numbering', '.btn-numbering', '[title*="Numeración"]', '[title*="Numbering"]']); restoreEditingFocus(keyboardWasOpen); break
             case 'align-left': ok = runNativeEditorAction('align-left') || clickControl(['#id-toolbar-btn-align-left', '.toolbar .btn-align-left', '.btn-align-left', '[title*="Alinear a la izquierda"]', '[title*="Align left"]']); restoreEditingFocus(keyboardWasOpen); break
-            case 'fontname': ok = clickControl(['.toolbar .combo-fontname', '.combo-fontname', '#font-combo']); break
-            case 'fontsize': ok = clickControl(['.toolbar .combo-fontsize', '.combo-fontsize', '#fontsize-combo']); break
-            case 'link': closeSheet(); ok = clickControl(['.toolbar .btn-insertlink', '.btn-insertlink', '[title*="Vínculo"]', '[title*="Link"]']); break
-            case 'search': closeSheet(); ok = clickControl(['.btn-menu-search', '[title*="Buscar"]', '[title*="Search"]']); break
+            case 'fontname': ok = clickControl(['#slot-field-fontname input', '#slot-field-fontname button', '.toolbar .combo-fontname input', '.combo-fontname input', '#font-combo']); break
+            case 'fontsize': ok = clickControl(['#slot-field-fontsize input', '#slot-field-fontsize button', '.toolbar .combo-fontsize input', '.combo-fontsize input', '#fontsize-combo']); break
+            case 'link': closeSheet(); ok = clickControl(['.slot-inshyperlink button', '.btn-big-inserthyperlink', '.toolbar .btn-insertlink', '.btn-insertlink', '[title*="Vínculo"]', '[title*="Link"]']); break
+            case 'search': closeSheet(); ok = clickControl(['#left-btn-searchbar', '.btn-menu-search', '[title*="Buscar"]', '[title*="Search"]']); break
             case 'share': closeSheet(); ok = clickControl(['.btn-share', '.btn-header-share', '[title*="Compartir"]', '[title*="Share"]'], 'Compartir no está habilitado en este documento.'); break
-            case 'comment': closeSheet(); ok = clickControl(['.btn-comments', '.btn-menu-comments', '[title*="Comentario"]', '[title*="Comment"]'], 'Los comentarios no están disponibles.'); break
+            case 'add-comment': closeSheet(); ok = clickControl(['[id^="tlbtn-addcomment-"]', '.slot-comment button', '.btn-big-add-comment'], 'No se puede añadir un comentario aquí.'); break
+            case 'comment': closeSheet(); ok = clickControl(['#left-btn-comments', '.btn-menu-comments', '.btn-comments', '[title*="Comentarios"]', '[title*="Comments"]'], 'Los comentarios no están disponibles.'); break
             case 'page': closeSheet(); ok = clickControl(['#id-toolbar-btn-blankpage', '.toolbar .btn-blankpage', '.toolbar .btn-pagebreak', '.btn-blankpage', '.btn-pagebreak']); break
             case 'table': closeSheet(); ok = clickControl(['#tlbtn-inserttable', '.toolbar .btn-inserttable', '.btn-inserttable']); break
             case 'image':
             case 'camera': closeSheet(); ok = clickControl(['[id^="tlbtn-insertimage-"]', '.toolbar .btn-insertimage', '.btn-insertimage'], 'El selector de imágenes no está disponible.'); break
             case 'shape': closeSheet(); ok = clickControl(['#tlbtn-insertshape', '.toolbar .btn-insertshape', '.btn-insertshape']); break
             case 'textbox': closeSheet(); ok = clickControl(['#tlbtn-inserttext', '.toolbar .btn-big-text', '.toolbar .btn-text', '.btn-big-text', '.btn-text']); break
-            case 'equation': closeSheet(); ok = clickControl(['.toolbar .btn-insertequation', '.toolbar .btn-equation', '.btn-insertequation', '.btn-equation']); break
+            case 'equation': closeSheet(); ok = clickControl(['#tlbtn-insertequation', '.toolbar .btn-insertequation', '.toolbar .btn-equation', '.btn-insertequation', '.btn-equation']); break
             case 'download': closeSheet(); ok = clickControl(['.btn-download', '.btn-save', '[title*="Descargar"]', '[title*="Download"]']); break
             default: return
         }
@@ -772,7 +773,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
                     makeButton('', 'Formas', icons.shape, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="shape"') +
                     makeButton('', 'Cuadro de texto', icons.text, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="textbox"') +
                     makeButton('', 'Vínculo', icons.link, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="link"') +
-                    makeButton('', 'Comentario', icons.comment, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="comment"') +
+                    makeButton('', 'Comentario', icons.comment, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="add-comment"') +
                     makeButton('', 'Ecuación', icons.equation, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="equation"') +
                     makeButton('', 'Más herramientas de Insertar', icons.more, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="quick-more"') +
                     makeButton('', 'Ocultar teclado', icons.keyboard, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="keyboard"') +
