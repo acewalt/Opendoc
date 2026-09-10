@@ -15,6 +15,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Configurar pnpm 10
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
       - name: Añadir locale español compatible sin alterar el motor
         run: |
           python3 - <<'PY'
@@ -88,8 +94,6 @@ jobs:
                   raise RuntimeError('Se encontró más de un fallback de idioma en api.js')
               api_text = api_text.replace(old, new, 1)
               api.write_text(api_text, encoding='utf-8')
-              if api.with_suffix('.js.gz').exists():
-                  write_gzip(api.with_suffix('.js.gz'), api_text.encode('utf-8'))
           elif new not in api_text:
               raise RuntimeError('No se encontró el fallback de editorConfig.lang en api.js')
 
@@ -97,6 +101,10 @@ jobs:
           home = Path('src/views/HomeView.vue')
           home_text = home.read_text(encoding='utf-8').replace("text: 'Loading'", "text: 'Cargando...'", 1)
           home.write_text(home_text, encoding='utf-8')
+
+          about = Path('src/views/AboutView.vue')
+          about_text = about.read_text(encoding='utf-8').replace('This is an about page', 'Acerca de Waltiva')
+          about.write_text(about_text, encoding='utf-8')
 
           handler = Path('src/components/DocumentHandler.vue')
           handler_text = handler.read_text(encoding='utf-8')
@@ -121,6 +129,7 @@ jobs:
           assert "lang: 'es'" in handler_text, 'DocumentHandler no inicializa el editor en español'
           assert 'editorConfig:{lang:"es",canCoAuthoring' in api_text, 'DocsAPI no tiene fallback español'
           assert "text: 'Cargando...'" in home_text, 'El indicador de carga externo no quedó traducido'
+          assert 'Acerca de Waltiva' in about_text, 'La vista Acerca de no quedó traducida'
 
           for editor in editors:
               text = Path(f'public/web-apps/apps/{editor}/main/app.js').read_text(encoding='utf-8')
@@ -143,6 +152,7 @@ jobs:
           candidates = [
               Path('src/components/DocumentHandler.vue'),
               Path('src/views/HomeView.vue'),
+              Path('src/views/AboutView.vue'),
               Path('public/web-apps/apps/api/documents/api.js'),
           ]
           bad = re.compile(r'''(?:editorConfig\s*:\s*\{[^{}]{0,200}?lang\s*:\s*|\blang\s*[:=]\s*)["'](?:en|zh|zh-CN|zh_CN)["']''', re.I | re.S)
@@ -156,7 +166,6 @@ jobs:
 
       - name: Instalar dependencias y compilar
         run: |
-          corepack enable
           pnpm install --frozen-lockfile
           pnpm run build
 
@@ -196,7 +205,7 @@ jobs:
           git status --short
           git diff --check
           git diff --stat
-          git diff -- src/views/HomeView.vue src/components/DocumentHandler.vue public/web-apps/apps/api/documents/api.js
+          git diff -- src/views/HomeView.vue src/views/AboutView.vue src/components/DocumentHandler.vue public/web-apps/apps/api/documents/api.js
 
       - name: Commit de la localización validada
         run: |
@@ -204,9 +213,9 @@ jobs:
           git config user.email 'guard.mauricio.save@gmail.com'
           git add \
             src/views/HomeView.vue \
+            src/views/AboutView.vue \
             src/components/DocumentHandler.vue \
             public/web-apps/apps/api/documents/api.js \
-            public/web-apps/apps/api/documents/api.js.gz \
             public/web-apps/apps/documenteditor/main/app.js \
             public/web-apps/apps/documenteditor/main/app.js.gz \
             public/web-apps/apps/spreadsheeteditor/main/app.js \
