@@ -3,197 +3,118 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#181918" />
+  <meta name="theme-color" content="#15171c" />
   <title>Waltiva</title>
-  <meta name="description" content="Editor local de PDF, Word y documentos en el navegador." />
+  <meta name="description" content="Escritorio local de documentos con ONLYOFFICE en el navegador." />
   <link rel="stylesheet" href="./styles.css" />
-  <link rel="stylesheet" href="./enhancements.css" />
   <link rel="stylesheet" href="./library-redesign.css" />
-  <link rel="stylesheet" href="./editor-redesign.css" />
-  <link rel="stylesheet" href="./editor-compact.css" />
-  <link rel="stylesheet" href="./editor-pro-v4.css" />
-  <link rel="stylesheet" href="./fidelity-v5.css" />
-  <link rel="stylesheet" href="./free-transform-v7.css" />
-  <link rel="stylesheet" href="./media-v8.css" />
-  <link rel="stylesheet" href="./zoom-spread-v10.css" />
-  <link rel="stylesheet" href="./book-layout-v11.css" />
-  <link rel="stylesheet" href="./spread-fix-v12.css" />
-  <link rel="stylesheet" href="./surface-mode-v13.css" />
 </head>
 <body>
-  <section id="welcomeView" class="view welcome-view">
-    <div class="welcome-glow"></div>
-    <div class="welcome-card">
-      <div class="welcome-logo"><span>W</span></div>
-      <h1>WALTIVA</h1>
-      <p class="eyebrow">LOCAL-FIRST · DOCUMENT STUDIO</p>
-      <p class="welcome-quote">“Abre. Edita. Exporta. Tus archivos permanecen en tu dispositivo.”</p>
-      <button id="enterWorkspace" class="gradient-button">Entrar al espacio de trabajo <span>→</span></button>
-      <span class="privacy-pill">⌁ Procesamiento local en el navegador</span>
-    </div>
-  </section>
-
-  <section id="libraryView" class="view library-view hidden">
+  <section id="libraryView" class="view library-view">
     <header class="library-header">
       <div class="brand brand-large">
         <div class="brand-icon">W</div>
         <div><strong>WALTIVA</strong><span>Tu escritorio local de documentos</span></div>
       </div>
       <div class="header-actions">
-        <button class="chip" id="themeToggleLibrary" title="Cambiar tema">☾ <span>Modo noche</span></button>
-        <button class="chip" id="privacyInfo">⌁ Local-first</button>
+        <button class="chip" id="themeToggleLibrary" type="button" title="Cambiar tema">☀ <span>Modo claro</span></button>
+        <button class="chip" id="privacyInfo" type="button">⌁ Local-first</button>
       </div>
     </header>
 
     <main class="library-main">
       <div class="section-title-row">
-        <div><p class="eyebrow dark">DOCUMENTOS</p><h2>Tu espacio de trabajo</h2></div>
-        <div class="library-actions">
-          <button id="newDocument" class="button primary teal">＋ Nuevo documento</button>
-          <label for="fileInputLibrary" class="button">⇧ Importar archivo</label>
-          <input id="fileInputLibrary" type="file" hidden accept=".pdf,.doc,.dot,.docx,.docm,.dotx,.dotm,.rtf,.odt,.txt,.html,.htm,.xml,.mht,.mhtml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+        <div>
+          <p class="eyebrow dark">DOCUMENTOS</p>
+          <h2>Tu espacio de trabajo</h2>
         </div>
       </div>
 
       <div class="document-grid" id="documentGrid">
-        <button class="document-card create-card" id="newDocumentCard">
+        <button class="document-card create-card" id="newDocumentCard" type="button">
           <div class="doc-cover create-cover">＋</div>
           <strong>Crear documento</strong>
           <span>Empieza desde una página en blanco</span>
         </button>
-        <label class="document-card import-card" for="fileInputCard">
+        <button class="document-card import-card" id="importDocumentCard" type="button">
           <div class="doc-cover import-cover">⇧</div>
           <strong>Importar documento</strong>
           <span>PDF, Word, RTF, ODT y más</span>
-        </label>
-        <input id="fileInputCard" type="file" hidden accept=".pdf,.doc,.dot,.docx,.docm,.dotx,.dotm,.rtf,.odt,.txt,.html,.htm,.xml,.mht,.mhtml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+        </button>
       </div>
 
+      <section id="fileSourceModule" class="file-source-module">
+        <div class="file-source-head">
+          <div><h3>Tus archivos</h3><p>Elige desde dónde quieres abrir un documento.</p></div>
+        </div>
+        <div class="file-source-grid">
+          <button type="button" class="file-source-card downloads-choice" id="downloadsChoice">
+            <span class="file-source-icon">⌄</span>
+            <span><strong>Descargas / Archivos</strong><small>Abre el selector del dispositivo o una carpeta autorizada.</small></span>
+          </button>
+          <button type="button" class="file-source-card recent-choice" id="recentChoice">
+            <span class="file-source-icon">↺</span>
+            <span><strong>Recientes</strong><small>Vuelve a los documentos que ya abriste en Waltiva.</small></span>
+          </button>
+        </div>
+      </section>
+
+      <section id="recentFilesSection" class="recent-files-section hidden">
+        <div class="recent-files-heading">
+          <div><h3>Importados recientemente</h3><p>Copias locales de los archivos que abriste en Waltiva.</p></div>
+          <button type="button" id="clearRecentFiles" class="recent-files-clear">Borrar lista</button>
+        </div>
+        <div id="recentFilesGrid" class="recent-files-grid"></div>
+        <p class="local-files-note">Waltiva no puede inspeccionar automáticamente la carpeta Descargas del iPhone. Usa “Descargas / Archivos” para abrir el selector de iOS. Waltiva guardará copias locales de hasta 20 MB por archivo.</p>
+      </section>
+
       <section class="supported-card">
-        <div><strong>Formatos compatibles</strong><span>Todo se procesa localmente; Waltiva no sube tus archivos.</span></div>
-        <div class="format-pills"><span>PDF</span><span>DOCX</span><span>DOC</span><span>RTF</span><span>ODT</span><span>HTML</span><span>TXT</span></div>
+        <div><strong>Formatos compatibles</strong><span>El archivo se procesa dentro del navegador.</span></div>
+        <div class="format-pills"><span>DOCX</span><span>XLSX</span><span>PPTX</span><span>DOC</span><span>XLS</span><span>PPT</span><span>PDF</span><span>ODT</span><span>ODS</span><span>ODP</span><span>RTF</span><span>TXT</span><span>CSV</span></div>
       </section>
     </main>
   </section>
 
-  <section id="editorView" class="view editor-view hidden">
-    <header class="editor-topbar">
-      <div class="editor-left">
-        <button id="backToLibrary" class="icon-button" title="Volver">←</button>
-        <div class="brand compact"><div class="brand-icon small">W</div><strong>Waltiva</strong></div>
-        <span class="slash">/</span>
-        <input id="documentTitle" class="document-title" value="Documento sin título" aria-label="Nombre del documento" />
+  <div id="newDocumentModal" class="modal-shell hidden" role="dialog" aria-modal="true" aria-labelledby="newDialogTitle">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="new-file-dialog">
+      <div class="new-file-dialog-head">
+        <h2 id="newDialogTitle">Nuevo / Abrir archivo</h2>
+        <button type="button" class="dialog-close" id="closeNewDocument" aria-label="Cerrar">×</button>
       </div>
-      <div class="editor-stats"><span id="wordCount">0 palabras</span><span>·</span><span id="pageCount">1 página</span></div>
-      <div class="editor-actions">
-        <button id="viewOriginal" class="top-tab hidden">Vista original</button>
-        <button id="editToggle" class="top-tab active">Editar</button>
-        <button id="themeToggleEditor" class="icon-button" title="Cambiar tema">☾</button>
-        <button id="exportMenuButton" class="button primary teal">Exportar ▾</button>
-      </div>
-      <div id="exportMenu" class="export-menu hidden">
-        <button id="exportHtml">HTML editable</button>
-        <button id="exportWord">Word (.doc)</button>
-        <button id="printDocument">Imprimir / PDF</button>
-      </div>
-    </header>
-
-    <div id="toolbar" class="word-toolbar">
-      <div class="toolbar-group">
-        <button data-cmd="undo" title="Deshacer">↶</button>
-        <button data-cmd="redo" title="Rehacer">↷</button>
-      </div>
-      <div class="toolbar-group select-group">
-        <select id="blockFormat" title="Estilo de párrafo">
-          <option value="p">Normal</option><option value="h1">Título 1</option><option value="h2">Título 2</option><option value="h3">Título 3</option><option value="blockquote">Cita</option>
-        </select>
-        <select id="fontFamily" title="Fuente">
-          <option value="Arial">Arial</option><option value="Calibri">Calibri</option><option value="Georgia">Georgia</option><option value="Times New Roman">Times New Roman</option><option value="Verdana">Verdana</option><option value="Courier New">Courier New</option>
-        </select>
-        <select id="fontSize" title="Tamaño de fuente">
-          <option value="10">10</option><option value="11">11</option><option value="12" selected>12</option><option value="14">14</option><option value="16">16</option><option value="18">18</option><option value="24">24</option><option value="32">32</option><option value="48">48</option>
-        </select>
-      </div>
-      <div class="toolbar-group">
-        <button data-cmd="bold" title="Negrita"><b>B</b></button>
-        <button data-cmd="italic" title="Cursiva"><i>I</i></button>
-        <button data-cmd="underline" title="Subrayado"><u>U</u></button>
-        <button data-cmd="strikeThrough" title="Tachado"><s>S</s></button>
-        <button data-cmd="subscript" title="Subíndice">x₂</button>
-        <button data-cmd="superscript" title="Superíndice">x²</button>
-      </div>
-      <div class="toolbar-group color-group">
-        <label class="color-tool" title="Color de texto">A<input id="textColor" type="color" value="#111111"></label>
-        <label class="color-tool highlight" title="Resaltado">▰<input id="highlightColor" type="color" value="#fff59d"></label>
-      </div>
-      <div class="toolbar-group">
-        <button data-cmd="justifyLeft" title="Alinear izquierda">≡</button>
-        <button data-cmd="justifyCenter" title="Centrar">≣</button>
-        <button data-cmd="justifyRight" title="Alinear derecha">≡</button>
-        <button data-cmd="justifyFull" title="Justificar">☷</button>
-      </div>
-      <div class="toolbar-group">
-        <button data-cmd="insertUnorderedList" title="Viñetas">•≡</button>
-        <button data-cmd="insertOrderedList" title="Numeración">1≡</button>
-        <button data-cmd="outdent" title="Reducir sangría">⇤</button>
-        <button data-cmd="indent" title="Aumentar sangría">⇥</button>
-      </div>
-      <div class="toolbar-group">
-        <button id="insertLink" title="Insertar enlace">🔗</button>
-        <button data-cmd="unlink" title="Quitar enlace">⌁̸</button>
-        <button id="insertImage" title="Insertar imagen">▧</button>
-        <input id="imageInput" type="file" accept="image/*" hidden>
-        <button id="insertTable" title="Insertar tabla">▦</button>
-        <button id="insertHr" title="Línea horizontal">—</button>
-        <button id="insertPageBreak" title="Salto de página">▯</button>
-        <button data-cmd="removeFormat" title="Borrar formato">Tx</button>
-      </div>
-      <div class="toolbar-group zoom-group">
-        <button id="zoomOut" title="Alejar">−</button><span id="zoomLabel">100%</span><button id="zoomIn" title="Acercar">＋</button>
-      </div>
-    </div>
-
-    <div class="editor-body">
-      <aside class="outline-sidebar">
-        <div class="outline-tabs"><button class="active">Páginas</button><button>Info</button></div>
-        <div class="outline-content">
-          <p class="outline-label">DOCUMENTO</p>
-          <div id="outlinePages" class="page-list"><button class="page-item active"><span>Pág. 1</span><small>Documento</small></button></div>
+      <div class="new-file-dialog-body">
+        <div class="dialog-section-title">Nuevo</div>
+        <div class="new-file-types">
+          <button type="button" class="new-file-type" data-new-type="docx">
+            <img src="./onlyoffice-preview/img/doc-formats/docx.png" alt="" />
+            <span>Documento</span>
+          </button>
+          <button type="button" class="new-file-type" data-new-type="xlsx">
+            <img src="./onlyoffice-preview/img/doc-formats/xlsx.png" alt="" />
+            <span>Hoja de cálculo</span>
+          </button>
+          <button type="button" class="new-file-type" data-new-type="pptx">
+            <img src="./onlyoffice-preview/img/doc-formats/pptx.png" alt="" />
+            <span>Presentación</span>
+          </button>
         </div>
-      </aside>
 
-      <main class="writing-area">
-        <div id="notice" class="notice hidden"></div>
-        <div id="originalSurface" class="original-surface hidden"></div>
-        <div id="editableSurface" class="editable-surface"></div>
-      </main>
+        <div class="dialog-section-title open-title">Abrir</div>
+        <div class="dialog-open-row">
+          <button type="button" class="dialog-open-button" id="openLocalFromDialog">▱ &nbsp; Abrir archivo local</button>
+        </div>
+      </div>
     </div>
+  </div>
+
+  <section id="officeView" class="office-view hidden" aria-label="Editor de documentos">
+    <iframe id="officeFrame" title="Editor ONLYOFFICE de Waltiva" allow="clipboard-read; clipboard-write"></iframe>
+    <button type="button" id="backToWorkspace" class="back-workspace">← Waltiva</button>
   </section>
 
-  <div id="busy" class="busy hidden"><div class="spinner"></div><strong id="busyText">Procesando documento…</strong></div>
-  <div id="toast" class="toast hidden"></div>
+  <input id="filePicker" type="file" hidden accept=".docx,.xlsx,.pptx,.doc,.xls,.ppt,.odt,.ods,.odp,.pdf,.txt,.rtf,.csv" />
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.4.0/dist/docx-preview.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/Alpaq92/JSDoc@821695a884e0c0bb8592a635d9524bb3e116cd67/src/docToText.js"></script>
-  <script src="./docx-render-fix-v11.js"></script>
-  <script src="./app.js"></script>
-  <script src="./enhancements.js"></script>
-  <script src="./library-redesign.js"></script>
-  <script src="./editor-redesign.js"></script>
-  <script src="./editor-compact.js"></script>
-  <script src="./docx-export.js"></script>
-  <script src="./editor-pro-v4.js"></script>
-  <script src="./pdf-fidelity-v5.js"></script>
-  <script src="./docx-fidelity-v5.js"></script>
-  <script src="./pdf-fidelity-v6.js"></script>
-  <script src="./free-transform-v7.js"></script>
-  <script src="./media-v8.js"></script>
-  <script src="./history-v9.js"></script>
-  <script src="./zoom-spread-v10.js"></script>
-  <script src="./book-layout-v11.js"></script>
-  <script src="./spread-fix-v12.js"></script>
-  <script src="./surface-mode-v13.js"></script>
+  <script src="./workspace.js"></script>
 </body>
 </html>
