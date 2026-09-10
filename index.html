@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#15171c" />
   <title>Waltiva</title>
   <meta name="description" content="Escritorio local de documentos con ONLYOFFICE en el navegador." />
-  <link rel="stylesheet" href="./styles.css?v=workspace2" />
-  <link rel="stylesheet" href="./library-redesign.css?v=workspace2" />
+  <link rel="stylesheet" href="./styles.css?v=launcher3" />
+  <link rel="stylesheet" href="./library-redesign.css?v=launcher3" />
 </head>
 <body>
   <section id="libraryView" class="view library-view">
@@ -107,14 +107,9 @@
     </div>
   </div>
 
-  <section id="officeView" class="office-view hidden" aria-label="Editor de documentos">
-    <iframe id="officeFrame" title="Editor ONLYOFFICE de Waltiva" allow="clipboard-read; clipboard-write"></iframe>
-    <button type="button" id="backToWorkspace" class="back-workspace">← Waltiva</button>
-  </section>
-
   <input id="filePicker" type="file" hidden accept=".docx,.xlsx,.pptx,.doc,.xls,.ppt,.odt,.ods,.odp,.pdf,.txt,.rtf,.csv" />
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <script src="./workspace.js?v=workspace2"></script>
+  <script src="./workspace.js?v=launcher3"></script>
 </body>
 </html>
