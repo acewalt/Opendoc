@@ -3,7 +3,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 /* Waltiva Mobile UI -------------------------------------------------------
  * Capa de interfaz responsive sobre ONLYOFFICE. Mantiene el motor y los
  * comandos originales, pero evita comprimir el ribbon de escritorio en iOS.
- * Waltiva Mobile UX v2: chrome persistente, quick tools desplazables y pinch zoom.
+ * Waltiva Mobile UX v3: acciones nativas, teclado persistente y pinch zoom continuo.
  */
 (function () {
     'use strict'
@@ -96,7 +96,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             '.wlt-mobile-btn.wlt-close{min-width:40px;padding-left:2px;}',
             '.wlt-mobile-btn.wlt-disabled{opacity:.35;pointer-events:none;}',
             '.wlt-mobile-formatbar{position:fixed;z-index:12000;left:50%;bottom:calc(18px + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:calc(100% - 24px);max-width:560px;height:60px;padding:0 7px;display:none;align-items:center;justify-content:flex-start;overflow:hidden;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:31px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);will-change:bottom;}',
-            'body.waltiva-mobile-ui.waltiva-mobile-keyboard-open:not(.waltiva-mobile-view-mode) .wlt-mobile-formatbar{display:flex;}',
+            'body.waltiva-mobile-ui:not(.waltiva-mobile-view-mode) .wlt-mobile-formatbar{display:flex;}',
             '.wlt-mobile-viewbar{position:fixed;z-index:12000;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(326px,calc(100% - 54px));height:60px;padding:0 9px;display:none;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:31px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}',
             'body.waltiva-mobile-view-mode .wlt-mobile-viewbar{display:flex;}',
             'body.waltiva-mobile-keyboard-open .wlt-mobile-viewbar{display:none;}',
@@ -242,7 +242,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 
     function openSheet(kind) {
         currentSheet = kind || 'insertar'
-        if (currentSheet === 'inicio' || currentSheet === 'insertar') hideKeyboard()
         var sheet = document.getElementById('wlt-mobile-sheet')
         var mask = document.getElementById('wlt-mobile-sheet-mask')
         var list = document.getElementById('wlt-mobile-sheet-list')
@@ -332,17 +331,145 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         if (scroller) scroller.scrollLeft = 0
     }
 
-    function zoomByStep(direction) {
-        var selectors = direction > 0
-            ? ['#btn-zoom-in', '.btn-zoom-in', '[title*="Acercar"]', '[title*="Zoom in"]']
-            : ['#btn-zoom-out', '.btn-zoom-out', '[title*="Alejar"]', '[title*="Zoom out"]']
-        return clickControl(selectors, direction > 0 ? 'No se pudo acercar el documento.' : 'No se pudo alejar el documento.')
+    function getEditorApi() {
+        try {
+            if (window.DE && typeof DE.getController === 'function') {
+                var status = DE.getController('Statusbar')
+                if (status && status.api) return status.api
+                var toolbarController = DE.getController('Toolbar')
+                if (toolbarController && toolbarController.api) return toolbarController.api
+                var main = DE.getController('Main')
+                if (main && main.api) return main.api
+            }
+        } catch (e) {}
+        try {
+            if (window.Asc && window.Asc.editor) return window.Asc.editor
+        } catch (e2) {}
+        return null
+    }
+
+    function getToolbarController() {
+        try {
+            if (window.DE && typeof DE.getController === 'function') return DE.getController('Toolbar') || null
+        } catch (e) {}
+        return null
+    }
+
+    function restoreEditingFocus(wasKeyboardOpen) {
+        if (!wasKeyboardOpen) return
+        var api = getEditorApi()
+        try {
+            if (api && typeof api.asc_enableKeyEvents === 'function') api.asc_enableKeyEvents(true)
+        } catch (e) {}
+        // ONLYOFFICE's own FocusEditor implementation focuses this hidden input.
+        // Doing it synchronously keeps the iOS virtual keyboard alive after a toolbar tap.
+        try {
+            if (window.AscCommon && AscCommon.g_inputContext && AscCommon.g_inputContext.HtmlArea) {
+                AscCommon.g_inputContext.HtmlArea.focus()
+            }
+        } catch (e2) {}
+        setTimeout(function () { updateVisualViewport(false) }, 40)
+    }
+
+    function runNativeEditorAction(action) {
+        var controller = getToolbarController()
+        var toolbar = controller && controller.toolbar
+        var api = (controller && controller.api) || getEditorApi()
+        try {
+            switch (action) {
+                case 'undo':
+                    if (controller && typeof controller.onUndo === 'function') controller.onUndo()
+                    else if (api && typeof api.Undo === 'function') api.Undo()
+                    else return false
+                    return true
+                case 'redo':
+                    if (controller && typeof controller.onRedo === 'function') controller.onRedo()
+                    else if (api && typeof api.Redo === 'function') api.Redo()
+                    else return false
+                    return true
+                case 'bold':
+                case 'italic':
+                case 'underline':
+                case 'strike': {
+                    if (!controller || !toolbar) return false
+                    var map = {
+                        bold: ['btnBold', 'onBold'],
+                        italic: ['btnItalic', 'onItalic'],
+                        underline: ['btnUnderline', 'onUnderline'],
+                        strike: ['btnStrikeout', 'onStrikeout']
+                    }
+                    var item = map[action]
+                    var btn = toolbar[item[0]]
+                    var handler = controller[item[1]]
+                    if (!btn || typeof handler !== 'function') return false
+                    var pressed = !btn.pressed
+                    if (typeof btn.toggle === 'function') btn.toggle(pressed, true)
+                    handler.call(controller, { pressed: pressed })
+                    return true
+                }
+                case 'bullets': {
+                    if (!controller || !toolbar || !toolbar.btnMarkers || typeof controller.onMarkers !== 'function') return false
+                    var bulletPressed = !toolbar.btnMarkers.pressed
+                    if (typeof toolbar.btnMarkers.toggle === 'function') toolbar.btnMarkers.toggle(bulletPressed, true)
+                    controller.onMarkers({ pressed: bulletPressed })
+                    return true
+                }
+                case 'numbering': {
+                    if (!controller || !toolbar || !toolbar.btnNumbers || typeof controller.onNumbers !== 'function') return false
+                    var numberPressed = !toolbar.btnNumbers.pressed
+                    if (typeof toolbar.btnNumbers.toggle === 'function') toolbar.btnNumbers.toggle(numberPressed, true)
+                    controller.onNumbers({ pressed: numberPressed })
+                    return true
+                }
+                case 'align-left':
+                    if (controller && typeof controller.onHorizontalAlign === 'function') {
+                        controller.onHorizontalAlign(1, { pressed: true })
+                        return true
+                    }
+                    if (api && typeof api.put_PrAlign === 'function') {
+                        api.put_PrAlign(1)
+                        return true
+                    }
+                    return false
+                default:
+                    return false
+            }
+        } catch (error) {
+            console.debug('Waltiva Mobile: falló la acción nativa ' + action + '.', error)
+            return false
+        }
+    }
+
+    function getCurrentZoomPercent(api) {
+        try {
+            var value = api && api.WordControl && api.WordControl.m_nZoomValue
+            if (typeof value === 'number' && isFinite(value) && value > 0) return value
+        } catch (e) {}
+        var label = document.querySelector('.statusbar #label-zoom')
+        var match = label && String(label.textContent || '').match(/(\d+)\s*%/)
+        return match ? parseInt(match[1], 10) : 100
+    }
+
+    function setDocumentZoom(value) {
+        var api = getEditorApi()
+        if (!api || typeof api.zoom !== 'function') return false
+        var next = Math.max(50, Math.min(500, Math.round(value)))
+        try {
+            api.zoom(next)
+            return true
+        } catch (error) {
+            console.debug('Waltiva Mobile: no se pudo aplicar el zoom.', error)
+            return false
+        }
     }
 
     function bindDocumentPinchZoom() {
         var pinchActive = false
         var startDistance = 0
-        var gestureScale = 1
+        var startZoom = 100
+        var pendingZoom = 100
+        var zoomFrame = 0
+
         function insideViewport(target) {
             return !!(target && (target.id === 'viewport' || (target.closest && target.closest('#viewport'))))
         }
@@ -352,53 +479,59 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             var dy = touches[0].clientY - touches[1].clientY
             return Math.sqrt(dx * dx + dy * dy)
         }
+        function scheduleZoom(value) {
+            pendingZoom = value
+            if (zoomFrame) return
+            var raf = window.requestAnimationFrame || function (callback) { return setTimeout(callback, 16) }
+            zoomFrame = raf(function () {
+                zoomFrame = 0
+                setDocumentZoom(pendingZoom)
+            })
+        }
+        function endPinch() {
+            pinchActive = false
+            startDistance = 0
+        }
+
         document.addEventListener('touchstart', function (event) {
-            if (event.touches && event.touches.length === 2 && insideViewport(event.target)) {
-                pinchActive = true
-                startDistance = distance(event.touches)
-            }
+            if (!event.touches || event.touches.length !== 2 || !insideViewport(event.target)) return
+            var api = getEditorApi()
+            if (!api || typeof api.zoom !== 'function') return
+            startDistance = distance(event.touches)
+            if (!startDistance) return
+            startZoom = getCurrentZoomPercent(api)
+            pendingZoom = startZoom
+            pinchActive = true
+            event.preventDefault()
+            event.stopPropagation()
         }, { passive: false, capture: true })
+
         document.addEventListener('touchmove', function (event) {
             if (!pinchActive || !event.touches || event.touches.length !== 2) return
+            var currentDistance = distance(event.touches)
+            if (!currentDistance || !startDistance) return
             event.preventDefault()
-            var next = distance(event.touches)
-            if (!startDistance || !next) return
-            var ratio = next / startDistance
-            if (ratio > 1.12) {
-                zoomByStep(1)
-                startDistance = next
-            } else if (ratio < 0.89) {
-                zoomByStep(-1)
-                startDistance = next
-            }
+            event.stopPropagation()
+            scheduleZoom(startZoom * (currentDistance / startDistance))
         }, { passive: false, capture: true })
+
         document.addEventListener('touchend', function (event) {
-            if (!event.touches || event.touches.length < 2) {
-                pinchActive = false
-                startDistance = 0
-            }
+            if (!event.touches || event.touches.length < 2) endPinch()
         }, { passive: true, capture: true })
+        document.addEventListener('touchcancel', endPinch, { passive: true, capture: true })
+
+        // Prevent Safari's page-level gesture zoom; document zoom is handled above.
         document.addEventListener('gesturestart', function (event) {
-            if (!insideViewport(event.target)) return
-            gestureScale = 1
-            event.preventDefault()
+            if (insideViewport(event.target)) event.preventDefault()
         }, { passive: false, capture: true })
         document.addEventListener('gesturechange', function (event) {
-            if (!insideViewport(event.target)) return
-            event.preventDefault()
-            var scale = event.scale || 1
-            if (scale / gestureScale > 1.14) {
-                zoomByStep(1)
-                gestureScale = scale
-            } else if (scale / gestureScale < 0.87) {
-                zoomByStep(-1)
-                gestureScale = scale
-            }
+            if (insideViewport(event.target)) event.preventDefault()
         }, { passive: false, capture: true })
     }
 
     function performAction(action) {
         var ok = true
+        var keyboardWasOpen = keyboardOffset > 0 || !!(document.body && document.body.classList.contains('waltiva-mobile-keyboard-open'))
         switch (action) {
             case 'done': setEditing(false); return
             case 'edit': setEditing(true); return
@@ -414,29 +547,29 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             case 'keyboard': hideKeyboard(); return
             case 'math': closeSheet(); toggleMath(); return
             case 'native': toggleNativeRibbon(); return
-            case 'undo': ok = clickControl(['.toolbar .btn-undo', '.btn-undo'], 'No hay cambios para deshacer.'); break
-            case 'redo': ok = clickControl(['.toolbar .btn-redo', '.btn-redo'], 'No hay cambios para rehacer.'); break
-            case 'bold': ok = clickControl(['.toolbar .btn-bold', '.btn-bold']); break
-            case 'italic': ok = clickControl(['.toolbar .btn-italic', '.btn-italic']); break
-            case 'underline': ok = clickControl(['.toolbar .btn-underline', '.btn-underline']); break
-            case 'strike': ok = clickControl(['.toolbar .btn-strikeout', '.btn-strikeout']); break
-            case 'fontcolor': ok = clickControl(['.toolbar .btn-fontcolor', '.btn-fontcolor']); break
-            case 'highlight': ok = clickControl(['.toolbar .btn-highlight', '.toolbar .btn-marker', '.btn-highlight', '.btn-marker']); break
-            case 'bullets': ok = clickControl(['.toolbar .btn-bullets', '.btn-bullets', '[title*="Viñetas"]', '[title*="Bullets"]']); break
-            case 'numbering': ok = clickControl(['.toolbar .btn-numbering', '.btn-numbering', '[title*="Numeración"]', '[title*="Numbering"]']); break
-            case 'align-left': ok = clickControl(['.toolbar .btn-align-left', '.btn-align-left', '[title*="Alinear a la izquierda"]', '[title*="Align left"]']); break
+            case 'undo': ok = runNativeEditorAction('undo') || clickControl(['#id-toolbar-btn-undo', '.toolbar .btn-undo', '.btn-undo'], 'No hay cambios para deshacer.'); restoreEditingFocus(keyboardWasOpen); break
+            case 'redo': ok = runNativeEditorAction('redo') || clickControl(['#id-toolbar-btn-redo', '.toolbar .btn-redo', '.btn-redo'], 'No hay cambios para rehacer.'); restoreEditingFocus(keyboardWasOpen); break
+            case 'bold': ok = runNativeEditorAction('bold') || clickControl(['#id-toolbar-btn-bold', '.toolbar .btn-bold', '.btn-bold']); restoreEditingFocus(keyboardWasOpen); break
+            case 'italic': ok = runNativeEditorAction('italic') || clickControl(['#id-toolbar-btn-italic', '.toolbar .btn-italic', '.btn-italic']); restoreEditingFocus(keyboardWasOpen); break
+            case 'underline': ok = runNativeEditorAction('underline') || clickControl(['#id-toolbar-btn-underline', '.toolbar .btn-underline', '.btn-underline']); restoreEditingFocus(keyboardWasOpen); break
+            case 'strike': ok = runNativeEditorAction('strike') || clickControl(['#id-toolbar-btn-strikeout', '.toolbar .btn-strikeout', '.btn-strikeout']); restoreEditingFocus(keyboardWasOpen); break
+            case 'fontcolor': ok = clickControl(['#id-toolbar-btn-fontcolor', '.toolbar .btn-fontcolor', '.btn-fontcolor']); break
+            case 'highlight': ok = clickControl(['#id-toolbar-btn-highlight', '.toolbar .btn-highlight', '.btn-highlight']); break
+            case 'bullets': ok = runNativeEditorAction('bullets') || clickControl(['#id-toolbar-btn-markers', '.toolbar .btn-setmarkers', '.btn-setmarkers', '[title*="Viñetas"]', '[title*="Bullets"]']); restoreEditingFocus(keyboardWasOpen); break
+            case 'numbering': ok = runNativeEditorAction('numbering') || clickControl(['#id-toolbar-btn-numbering', '.toolbar .btn-numbering', '.btn-numbering', '[title*="Numeración"]', '[title*="Numbering"]']); restoreEditingFocus(keyboardWasOpen); break
+            case 'align-left': ok = runNativeEditorAction('align-left') || clickControl(['#id-toolbar-btn-align-left', '.toolbar .btn-align-left', '.btn-align-left', '[title*="Alinear a la izquierda"]', '[title*="Align left"]']); restoreEditingFocus(keyboardWasOpen); break
             case 'fontname': ok = clickControl(['.toolbar .combo-fontname', '.combo-fontname', '#font-combo']); break
             case 'fontsize': ok = clickControl(['.toolbar .combo-fontsize', '.combo-fontsize', '#fontsize-combo']); break
             case 'link': closeSheet(); ok = clickControl(['.toolbar .btn-insertlink', '.btn-insertlink', '[title*="Vínculo"]', '[title*="Link"]']); break
             case 'search': closeSheet(); ok = clickControl(['.btn-menu-search', '[title*="Buscar"]', '[title*="Search"]']); break
             case 'share': closeSheet(); ok = clickControl(['.btn-share', '.btn-header-share', '[title*="Compartir"]', '[title*="Share"]'], 'Compartir no está habilitado en este documento.'); break
             case 'comment': closeSheet(); ok = clickControl(['.btn-comments', '.btn-menu-comments', '[title*="Comentario"]', '[title*="Comment"]'], 'Los comentarios no están disponibles.'); break
-            case 'page': closeSheet(); ok = clickControl(['.toolbar .btn-blankpage', '.toolbar .btn-pagebreak', '.btn-blankpage', '.btn-pagebreak']); break
-            case 'table': closeSheet(); ok = clickControl(['.toolbar .btn-inserttable', '.btn-inserttable']); break
+            case 'page': closeSheet(); ok = clickControl(['#id-toolbar-btn-blankpage', '.toolbar .btn-blankpage', '.toolbar .btn-pagebreak', '.btn-blankpage', '.btn-pagebreak']); break
+            case 'table': closeSheet(); ok = clickControl(['#tlbtn-inserttable', '.toolbar .btn-inserttable', '.btn-inserttable']); break
             case 'image':
-            case 'camera': closeSheet(); ok = clickControl(['.toolbar .btn-insertimage', '.btn-insertimage'], 'El selector de imágenes no está disponible.'); break
-            case 'shape': closeSheet(); ok = clickControl(['.toolbar .btn-insertshape', '.btn-insertshape']); break
-            case 'textbox': closeSheet(); ok = clickControl(['.toolbar .btn-big-text', '.toolbar .btn-text', '.btn-big-text', '.btn-text']); break
+            case 'camera': closeSheet(); ok = clickControl(['[id^="tlbtn-insertimage-"]', '.toolbar .btn-insertimage', '.btn-insertimage'], 'El selector de imágenes no está disponible.'); break
+            case 'shape': closeSheet(); ok = clickControl(['#tlbtn-insertshape', '.toolbar .btn-insertshape', '.btn-insertshape']); break
+            case 'textbox': closeSheet(); ok = clickControl(['#tlbtn-inserttext', '.toolbar .btn-big-text', '.toolbar .btn-text', '.btn-big-text', '.btn-text']); break
             case 'equation': closeSheet(); ok = clickControl(['.toolbar .btn-insertequation', '.toolbar .btn-equation', '.btn-insertequation', '.btn-equation']); break
             case 'download': closeSheet(); ok = clickControl(['.btn-download', '.btn-save', '[title*="Descargar"]', '[title*="Download"]']); break
             default: return
