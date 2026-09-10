@@ -13,62 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: Probar apertura del combo de fuentes
+      - name: Mostrar fragmentos compilados de ComboBoxFonts
         run: |
-          cp e2e/vue.spec.ts /tmp/vue.spec.ts
-          cat > e2e/vue.spec.ts <<'TS'
-          import { test, expect } from '@playwright/test'
-
-          test.setTimeout(90000)
-          test('diagnóstico dropdown de fuentes', async ({ page }) => {
-            const pageErrors: string[] = []
-            const fontRequests: string[] = []
-            const badResponses: string[] = []
-            page.on('pageerror', err => pageErrors.push(err.message))
-            page.on('request', req => {
-              if (req.url().includes('fonts_thumbnail')) fontRequests.push(req.url())
-            })
-            page.on('response', res => {
-              if (res.url().includes('fonts_thumbnail')) fontRequests.push(`${res.status()} ${res.url()}`)
-              if (res.status() >= 400) badResponses.push(`${res.status()} ${res.url()}`)
-            })
-
-            await page.goto('/')
-            await page.getByRole('button', { name: 'Nuevo / Abrir archivo' }).click()
-            await page.getByText('Documento', { exact: true }).click()
-            const frame = page.frameLocator('iframe[name="frameEditor"]')
-            await expect(frame.getByText('Inicio', { exact: true }).first()).toBeVisible({ timeout: 30000 })
-            await page.waitForTimeout(1500)
-
-            const combos = frame.locator('.combobox.fonts')
-            console.log(`FONT_COMBOS=${await combos.count()}`)
-            const visibleIndexes: number[] = []
-            for (let i = 0; i < await combos.count(); i++) {
-              if (await combos.nth(i).isVisible()) visibleIndexes.push(i)
-            }
-            console.log(`VISIBLE_FONT_COMBOS=${JSON.stringify(visibleIndexes)}`)
-            expect(visibleIndexes.length).toBeGreaterThan(0)
-            const combo = combos.nth(visibleIndexes[0])
-            const input = combo.locator('input')
-            console.log(`FONT_VALUE=${await input.inputValue()}`)
-            const menu = combo.locator('ul.dropdown-menu')
-            console.log(`MENU_BEFORE class=${await menu.getAttribute('class')} display=${await menu.evaluate(el => getComputedStyle(el).display)}`)
-
-            await combo.locator('button.dropdown-toggle').click()
-            await page.waitForTimeout(1200)
-            console.log(`MENU_AFTER class=${await menu.getAttribute('class')} display=${await menu.evaluate(el => getComputedStyle(el).display)} visible=${await menu.isVisible()}`)
-            console.log(`MENU_ITEMS=${await menu.locator('li').count()}`)
-            console.log(`FONT_REQUESTS=${JSON.stringify(fontRequests)}`)
-            console.log(`FONT_BAD_RESPONSES=${JSON.stringify(badResponses.filter(x => x.includes('font') || x.includes('Font')))}`)
-            console.log(`PAGE_ERRORS=${JSON.stringify(pageErrors)}`)
-          })
-          TS
-          pnpm exec playwright test --project=chromium --retries=0
-          mv /tmp/vue.spec.ts e2e/vue.spec.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          for editor in ('documenteditor','spreadsheeteditor','presentationeditor'):
+              text=Path(f'public/web-apps/apps/{editor}/main/app.js').read_text(encoding='utf-8')
+              print('\n===', editor, '===')
+              for marker in ('fonts_thumbnail','createImageData','imgidx'):
+                  pos=text.find(marker)
+                  print('\nMARKER', marker, 'POS', pos)
+                  if pos >= 0:
+                      print(text[max(0,pos-700):pos+1200])
+          PY
