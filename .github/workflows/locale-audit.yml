@@ -13,13 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Comparar locales del fork con español oficial 7.4.1
+      - name: Comparar cobertura española 7.4.1 y actual
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import json, urllib.request
 
-          COMMIT = '1e0cc82ea07fbc3d584c5644ec13873a1600be7e'
+          BASE_COMMIT = '1e0cc82ea07fbc3d584c5644ec13873a1600be7e'
           editors = ('documenteditor','spreadsheeteditor','presentationeditor')
 
           def download(url):
@@ -27,10 +27,11 @@ jobs:
               with urllib.request.urlopen(req, timeout=90) as r:
                   return r.read()
 
-          # Extrae el objeto del define AMD y lo convierte con Node en un paso posterior.
           for editor in editors:
-              es = json.loads(download(f'https://raw.githubusercontent.com/ONLYOFFICE/web-apps/{COMMIT}/apps/{editor}/main/locale/es.json').decode('utf-8-sig'))
-              Path(f'/tmp/{editor}-es.json').write_text(json.dumps(es, ensure_ascii=False), encoding='utf-8')
+              old = json.loads(download(f'https://raw.githubusercontent.com/ONLYOFFICE/web-apps/{BASE_COMMIT}/apps/{editor}/main/locale/es.json').decode('utf-8-sig'))
+              current = json.loads(download(f'https://raw.githubusercontent.com/ONLYOFFICE/web-apps/master/apps/{editor}/main/locale/es.json').decode('utf-8-sig'))
+              Path(f'/tmp/{editor}-es-741.json').write_text(json.dumps(old, ensure_ascii=False), encoding='utf-8')
+              Path(f'/tmp/{editor}-es-current.json').write_text(json.dumps(current, ensure_ascii=False), encoding='utf-8')
           PY
 
           node <<'JS'
@@ -61,15 +62,25 @@ jobs:
             throw new Error(`${moduleName}: objeto sin cierre`)
           }
 
-          let total = 0
+          let total741 = 0, totalCurrent = 0
           for (const editor of ['documenteditor','spreadsheeteditor','presentationeditor']) {
             const text = fs.readFileSync(`public/web-apps/apps/${editor}/main/app.js`, 'utf8')
             const zh = extractModuleObject(text, `${editor}/main/locale/zh.json`)
-            const es = JSON.parse(fs.readFileSync(`/tmp/${editor}-es.json`, 'utf8'))
-            const missing = Object.keys(zh).filter(k => !(k in es)).sort()
-            console.log(`\n===== ${editor}: ${missing.length} faltantes =====`)
-            for (const key of missing) console.log(`${key}\t${JSON.stringify(zh[key])}`)
-            total += missing.length
+            const old = JSON.parse(fs.readFileSync(`/tmp/${editor}-es-741.json`, 'utf8'))
+            const current = JSON.parse(fs.readFileSync(`/tmp/${editor}-es-current.json`, 'utf8'))
+            const missing741 = Object.keys(zh).filter(k => !(k in old)).sort()
+            const missingCurrent = Object.keys(zh).filter(k => !(k in current)).sort()
+            const recovered = missing741.filter(k => k in current)
+            const typeMismatch = Object.keys(zh).filter(k => k in current && (Array.isArray(zh[k]) !== Array.isArray(current[k]) || typeof zh[k] !== typeof current[k]))
+            console.log(`\n===== ${editor} =====`)
+            console.log(`fork=${Object.keys(zh).length} | faltan en 7.4.1=${missing741.length} | faltan en actual=${missingCurrent.length} | recuperables=${recovered.length} | tipos incompatibles=${typeMismatch.length}`)
+            if (missingCurrent.length) {
+              console.log('--- Aún faltan incluso en locale actual ---')
+              for (const key of missingCurrent) console.log(`${key}\t${JSON.stringify(zh[key])}`)
+            }
+            total741 += missing741.length
+            totalCurrent += missingCurrent.length
           }
-          console.log(`\nTOTAL_FALTANTES=${total}`)
+          console.log(`\nTOTAL_741=${total741}`)
+          console.log(`TOTAL_ACTUAL=${totalCurrent}`)
           JS
