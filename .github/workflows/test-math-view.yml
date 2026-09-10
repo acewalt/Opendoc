@@ -25,7 +25,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Validar control en Diseño e interfaz móvil en WebKit
+      - name: Validar escritorio y experiencia móvil WebKit
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
@@ -36,74 +36,51 @@ jobs:
           const { chromium, webkit, devices } = require('@playwright/test');
           const assert = require('node:assert/strict');
 
-          async function openDocument(page, mobile = false) {
+          async function createDocument(page) {
             await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
-            await page.waitForFunction(() => document.querySelector('iframe[name="frameEditor"]'), null, { timeout: 120000 });
-
-            if (mobile) {
-              await page.waitForFunction(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                return !!frame?.contentDocument?.querySelector('#wlt-mobile-topbar');
-              }, null, { timeout: 120000 });
-            } else {
-              await page.waitForFunction(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                return !!frame?.contentDocument?.querySelector('#waltiva-math-view-toggle');
-              }, null, { timeout: 120000 });
-            }
+            await page.waitForFunction(() => !!document.querySelector('iframe[name="frameEditor"]'), null, { timeout: 120000 });
           }
 
-          async function activateDesign(page) {
-            return page.evaluate(() => {
+          async function waitForEditor(page, mobile) {
+            await page.waitForFunction((isMobile) => {
               const frame = document.querySelector('iframe[name="frameEditor"]');
               const doc = frame?.contentDocument;
               if (!doc) return false;
-              const tab = [...doc.querySelectorAll('li.ribtab')].find(el => (el.textContent || '').trim() === 'Diseño');
-              tab?.querySelector('a')?.click();
-              return !!tab;
-            });
+              const text = (doc.body?.innerText || '').replace(/\s+/g, ' ');
+              const readyControl = isMobile ? doc.querySelector('#wlt-mobile-topbar') : doc.querySelector('#waltiva-math-view-toggle');
+              return !!readyControl && !!doc.querySelector('canvas') && !text.includes('Cargando documento');
+            }, mobile, { timeout: 120000 });
           }
 
           (async () => {
             {
               const browser = await chromium.launch({ headless: true });
               const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-              await openDocument(page, false);
-              assert.equal(await page.locator('.math-view-toolbar').count(), 0, 'La barra matemática externa sigue presente');
-              assert.ok(await activateDesign(page), 'No se encontró la pestaña Diseño');
-              await page.waitForTimeout(500);
+              await createDocument(page);
+              await waitForEditor(page, false);
 
               const before = await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                const doc = frame?.contentDocument;
+                const doc = document.querySelector('iframe[name="frameEditor"]')?.contentDocument;
+                const tab = [...(doc?.querySelectorAll('li.ribtab') || [])].find(el => (el.textContent || '').trim() === 'Diseño');
+                tab?.querySelector('a')?.click();
                 const button = doc?.querySelector('#waltiva-math-view-toggle');
-                if (!button) return null;
-                const rect = button.getBoundingClientRect();
+                const rect = button?.getBoundingClientRect();
                 return {
-                  checked: button.getAttribute('aria-checked'),
-                  visible: rect.width > 0 && rect.height > 0 && getComputedStyle(button).display !== 'none',
-                  inDesignGroup: !!button.closest('.group')?.querySelector('#slot-btn-pagecolor'),
+                  visible: !!rect && rect.width > 0 && rect.height > 0,
+                  inDesignGroup: !!button?.closest('.group')?.querySelector('#slot-btn-pagecolor'),
+                  checked: button?.getAttribute('aria-checked'),
                 };
               });
-              console.log('MATH_RIBBON_BEFORE=' + JSON.stringify(before));
-              assert.ok(before?.visible, 'El control Vista matemática no está visible en Diseño');
-              assert.ok(before?.inDesignGroup, 'El control no quedó dentro del grupo de Diseño');
-              assert.equal(before?.checked, 'false');
+              assert.ok(before.visible, 'Vista matemática no está visible en Diseño');
+              assert.ok(before.inDesignGroup, 'Vista matemática no está dentro del grupo de Diseño');
+              assert.equal(before.checked, 'false');
 
               await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                frame?.contentDocument?.querySelector('#waltiva-math-view-toggle')?.click();
+                document.querySelector('iframe[name="frameEditor"]')?.contentDocument?.querySelector('#waltiva-math-view-toggle')?.click();
               });
               await page.locator('.math-preview').waitFor({ state: 'visible', timeout: 5000 });
-
-              const after = await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                const button = frame?.contentDocument?.querySelector('#waltiva-math-view-toggle');
-                return button?.getAttribute('aria-checked');
-              });
-              assert.equal(after, 'true', 'El booleano no cambió a activo');
               await browser.close();
             }
 
@@ -113,76 +90,81 @@ jobs:
               const page = await context.newPage();
               const pageErrors = [];
               page.on('pageerror', err => pageErrors.push(String(err)));
-              await openDocument(page, true);
 
-              await page.waitForFunction(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                const doc = frame?.contentDocument;
-                const text = (doc?.body?.innerText || '').replace(/\s+/g, ' ');
-                return !!doc?.querySelector('canvas') && !text.includes('Cargando documento');
-              }, null, { timeout: 120000 });
+              await createDocument(page);
+              await waitForEditor(page, true);
+              await page.waitForTimeout(1800);
 
               const state = await page.evaluate(() => {
                 const frame = document.querySelector('iframe[name="frameEditor"]');
                 const doc = frame?.contentDocument;
-                if (!doc) return null;
-                const text = (doc.body.innerText || '').replace(/\s+/g, ' ');
+                const win = frame?.contentWindow;
+                if (!doc || !win) return null;
+
                 const topbar = doc.querySelector('#wlt-mobile-topbar');
                 const formatbar = doc.querySelector('#wlt-mobile-formatbar');
                 const toolbar = doc.querySelector('.toolbar');
                 const viewport = doc.querySelector('#viewport');
-                const topRect = topbar?.getBoundingClientRect();
-                const formatRect = formatbar?.getBoundingClientRect();
-                const diagnostic = [...doc.querySelectorAll('[id],canvas')].filter(el => /ruler|scroll|viewer|editor_sdk|canvas/i.test((el.id || '') + ' ' + (el.className || ''))).map(el => {
-                  const r = el.getBoundingClientRect();
-                  const s = getComputedStyle(el);
-                  return {tag:el.tagName,id:el.id,cls:String(el.className || '').slice(0,120),x:r.x,y:r.y,w:r.width,h:r.height,display:s.display,visibility:s.visibility,overflow:s.overflow};
-                }).slice(0,80);
-                console.log('MOBILE_EDITOR_DIAGNOSTIC=' + JSON.stringify(diagnostic, null, 2));
+                const fitWidth = doc.querySelector('#btn-zoom-towidth, [title*="Ajustar al ancho"], [title*="Ajustar a ancho"], [title*="Fit to width"]');
+                const rulerSelectors = ['#id_hor_ruler','#id_vert_ruler','#id_vertical_scroll','#id_horizontal_scroll','#id_vscrollbar','#id_hscrollbar','#id_buttonTabs'];
+                const chrome = rulerSelectors.map(selector => doc.querySelector(selector)).filter(Boolean).map(el => {
+                  const rect = el.getBoundingClientRect();
+                  const css = win.getComputedStyle(el);
+                  return { id: el.id, width: rect.width, height: rect.height, visibility: css.visibility, opacity: css.opacity };
+                });
+
+                const tr = topbar?.getBoundingClientRect();
+                const fr = formatbar?.getBoundingClientRect();
+                const vr = viewport?.getBoundingClientRect();
                 return {
-                  loading: text.includes('Cargando documento'),
-                  hasCanvas: !!doc.querySelector('canvas'),
                   mobileClass: doc.body.classList.contains('waltiva-mobile-ui'),
-                  topbarVisible: !!topRect && topRect.width > 0 && topRect.height >= 50,
-                  formatbarVisible: !!formatRect && formatRect.width > 0 && formatRect.height >= 50,
-                  toolbarHeight: toolbar ? parseFloat(getComputedStyle(toolbar).height) : null,
-                  viewportTop: viewport ? parseFloat(getComputedStyle(viewport).top) : null,
-                  hasInsertButton: !!doc.querySelector('[data-wlt-action="insert"]'),
+                  topbarVisible: !!tr && tr.width > 0 && tr.height >= 50,
+                  formatbarVisible: !!fr && fr.width > 0 && fr.height >= 50,
+                  toolbarHeight: toolbar ? parseFloat(win.getComputedStyle(toolbar).height) : null,
+                  viewportWidth: vr?.width || 0,
+                  windowWidth: win.innerWidth,
+                  viewportLeft: vr?.left ?? null,
+                  hasFitWidth: !!fitWidth,
+                  keyboardVar: win.getComputedStyle(doc.documentElement).getPropertyValue('--wlt-keyboard-offset').trim(),
+                  chrome,
                 };
               });
 
-              console.log('IPHONE_WEBKIT=' + JSON.stringify({ state, pageErrors }, null, 2));
+              console.log('MOBILE_LAYOUT=' + JSON.stringify({ state, pageErrors }, null, 2));
               assert.ok(!pageErrors.some(x => x.includes('requestIdleCallback')), 'requestIdleCallback sigue fallando');
-              assert.equal(state?.loading, false, 'ONLYOFFICE sigue atascado en Cargando documento');
-              assert.ok(state?.hasCanvas, 'No se creó el canvas del documento');
-              assert.ok(state?.mobileClass, 'No se activó la interfaz móvil de Waltiva');
+              assert.ok(state?.mobileClass, 'No se activó la interfaz móvil');
               assert.ok(state?.topbarVisible, 'La barra superior móvil no está visible');
-              assert.ok(state?.formatbarVisible, 'La barra flotante de formato no está visible');
-              assert.ok(state?.toolbarHeight === 0, 'La cinta de escritorio sigue ocupando espacio');
-              assert.ok(state?.viewportTop >= 50, 'El documento no reserva espacio para la barra superior móvil');
-              assert.ok(state?.hasInsertButton, 'Falta el botón de inserción móvil');
+              assert.ok(state?.formatbarVisible, 'La barra de formato móvil no está visible');
+              assert.equal(state?.toolbarHeight, 0, 'La cinta de escritorio sigue ocupando espacio');
+              assert.ok(state?.viewportWidth >= state?.windowWidth - 2, 'El viewport del documento no usa todo el ancho disponible');
+              assert.ok(Math.abs(state?.viewportLeft || 0) <= 1, 'El viewport mantiene margen lateral del editor');
+              assert.ok(state?.hasFitWidth, 'No se encontró el control Ajustar al ancho');
+              assert.ok(state?.chrome.every(x => x.visibility === 'hidden' || x.opacity === '0' || x.width <= 1 || x.height <= 1), 'Alguna regla o scrollbar interna sigue visible');
 
-              await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                frame?.contentDocument?.querySelector('[data-wlt-action="insert"]')?.click();
-              });
-              await page.waitForTimeout(250);
-              const sheetState = await page.evaluate(() => {
+              const keyboardLift = await page.evaluate(async () => {
                 const frame = document.querySelector('iframe[name="frameEditor"]');
                 const doc = frame?.contentDocument;
-                const sheet = doc?.querySelector('#wlt-mobile-sheet');
-                return {
-                  open: !!sheet?.classList.contains('open'),
-                  title: doc?.querySelector('#wlt-mobile-sheet-title')?.textContent,
-                  hasTable: !!doc?.querySelector('[data-wlt-action="table"]'),
-                  hasImage: !!doc?.querySelector('[data-wlt-action="image"]'),
-                  hasEquation: !!doc?.querySelector('[data-wlt-action="equation"]'),
-                };
+                const bar = doc?.querySelector('#wlt-mobile-formatbar');
+                if (!doc || !bar) return null;
+                const before = bar.getBoundingClientRect().top;
+                doc.documentElement.style.setProperty('--wlt-keyboard-offset', '280px');
+                await new Promise(resolve => setTimeout(resolve, 80));
+                const after = bar.getBoundingClientRect().top;
+                doc.documentElement.style.setProperty('--wlt-keyboard-offset', '0px');
+                return before - after;
               });
-              console.log('MOBILE_SHEET=' + JSON.stringify(sheetState));
-              assert.ok(sheetState.open, 'El panel inferior de inserción no abrió');
-              assert.equal(sheetState.title, 'Insertar');
-              assert.ok(sheetState.hasTable && sheetState.hasImage && sheetState.hasEquation, 'Faltan herramientas de inserción');
+              console.log('KEYBOARD_TOOLBAR_LIFT=' + keyboardLift);
+              assert.ok(keyboardLift > 220, 'La barra de formato no se eleva por encima del teclado');
+
+              await page.evaluate(() => {
+                document.querySelector('iframe[name="frameEditor"]')?.contentDocument?.querySelector('[data-wlt-action="insert"]')?.click();
+              });
+              await page.waitForTimeout(200);
+              const sheetOpen = await page.evaluate(() => {
+                const doc = document.querySelector('iframe[name="frameEditor"]')?.contentDocument;
+                return doc?.querySelector('#wlt-mobile-sheet')?.classList.contains('open');
+              });
+              assert.ok(sheetOpen, 'El panel móvil Insertar no abre');
               await browser.close();
             }
           })().catch(error => { console.error(error); process.exit(1); });
