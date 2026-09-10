@@ -11,17 +11,22 @@ page.on('console', message => {
   if (message.type() === 'error') consoleErrors.push(message.text())
 })
 
+const frameSelector = 'iframe[name="frameEditor"], #iframe iframe'
+
 async function snapshot() {
-  return page.evaluate(() => {
-    const frame = document.querySelector('iframe[name="frameEditor"]')
-    if (!frame) return { frame: false }
+  return page.evaluate((selector) => {
+    const frame = document.querySelector(selector)
+    const host = document.getElementById('iframe')
+    const frames = [...document.querySelectorAll('iframe')].map(f => ({ name: f.name, id: f.id, src: f.src }))
+    if (!frame) return { frame: false, frames, hostHtml: host?.innerHTML?.slice(0, 800) || '' }
     const doc = frame.contentDocument
-    if (!doc) return { frame: true, doc: false, src: frame.src }
+    if (!doc) return { frame: true, doc: false, src: frame.src, frames }
     const text = (doc.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 600)
     return {
       frame: true,
       doc: true,
       src: frame.src,
+      frames,
       readyState: doc.readyState,
       bodyClass: doc.body?.className || '',
       topbar: !!doc.querySelector('#wlt-mobile-topbar'),
@@ -32,7 +37,7 @@ async function snapshot() {
       loading: text.includes('Cargando documento'),
       text,
     }
-  })
+  }, frameSelector)
 }
 
 try {
@@ -40,18 +45,17 @@ try {
   await page.getByText('Crear documento', { exact: true }).click()
   await page.getByText('Documento', { exact: true }).click()
 
-  await page.waitForFunction(() => !!document.querySelector('iframe[name="frameEditor"]'), null, { timeout: 30000 })
-
   let state = null
-  for (let i = 0; i < 18; i++) {
-    await page.waitForTimeout(i === 0 ? 1200 : 2500)
+  for (let i = 0; i < 30; i++) {
+    await page.waitForTimeout(i === 0 ? 1500 : 2500)
     state = await snapshot()
     console.log(`READY_SNAPSHOT_${i}=` + JSON.stringify(state))
-    if (state.topbar && state.viewbar && state.formatbar && state.viewport && !state.loading) break
+    if (state.frame && state.topbar && state.viewbar && state.formatbar && state.viewport && !state.loading) break
   }
 
   console.log('PAGE_ERRORS=' + JSON.stringify(errors))
   console.log('CONSOLE_ERRORS=' + JSON.stringify(consoleErrors.slice(-20)))
+  assert.ok(state?.frame, 'No se creó el iframe de ONLYOFFICE')
   assert.ok(state?.topbar, 'No se creó la barra superior móvil')
   assert.ok(state?.viewbar, 'No se creó la barra de lectura móvil')
   assert.ok(state?.formatbar, 'No se creó la barra de formato móvil')
@@ -59,8 +63,8 @@ try {
   assert.equal(state?.loading, false, 'ONLYOFFICE sigue mostrando Cargando documento')
   assert.ok(!errors.some(x => x.includes('requestIdleCallback')), 'requestIdleCallback sigue fallando')
 
-  const initial = await page.evaluate(() => {
-    const frame = document.querySelector('iframe[name="frameEditor"]')
+  const initial = await page.evaluate((selector) => {
+    const frame = document.querySelector(selector)
     const doc = frame.contentDocument
     const win = frame.contentWindow
     const viewport = doc.querySelector('#viewport')
@@ -82,7 +86,7 @@ try {
       viewRowVisible: win.getComputedStyle(viewRow).display !== 'none',
       editRowVisible: win.getComputedStyle(editRow).display !== 'none',
     }
-  })
+  }, frameSelector)
 
   console.log('INITIAL_MOBILE_STATE=' + JSON.stringify(initial))
   assert.ok(initial.mobile, 'No se activó la UI móvil')
@@ -93,14 +97,14 @@ try {
   assert.ok(initial.viewportWidth >= initial.windowWidth - 2, 'El documento no usa todo el ancho')
   assert.ok(Math.abs(initial.viewportLeft) <= 1, 'El editor conserva un margen lateral')
 
-  await page.evaluate(() => {
-    const doc = document.querySelector('iframe[name="frameEditor"]').contentDocument
+  await page.evaluate((selector) => {
+    const doc = document.querySelector(selector).contentDocument
     doc.querySelector('[data-wlt-action="edit"]')?.click()
-  })
+  }, frameSelector)
   await page.waitForTimeout(200)
 
-  const editingNoKeyboard = await page.evaluate(() => {
-    const frame = document.querySelector('iframe[name="frameEditor"]')
+  const editingNoKeyboard = await page.evaluate((selector) => {
+    const frame = document.querySelector(selector)
     const doc = frame.contentDocument
     const win = frame.contentWindow
     const bar = doc.querySelector('#wlt-mobile-formatbar')
@@ -108,12 +112,12 @@ try {
       viewMode: doc.body.classList.contains('waltiva-mobile-view-mode'),
       formatbarVisible: win.getComputedStyle(bar).display !== 'none' && bar.getBoundingClientRect().height > 0,
     }
-  })
+  }, frameSelector)
   assert.equal(editingNoKeyboard.viewMode, false, 'Editar no cambia al modo edición')
   assert.equal(editingNoKeyboard.formatbarVisible, false, 'La barra de formato debe esperar al teclado')
 
-  const keyboard = await page.evaluate(async () => {
-    const frame = document.querySelector('iframe[name="frameEditor"]')
+  const keyboard = await page.evaluate(async (selector) => {
+    const frame = document.querySelector(selector)
     const doc = frame.contentDocument
     const bar = doc.querySelector('#wlt-mobile-formatbar')
     doc.body.classList.add('waltiva-mobile-keyboard-open')
@@ -122,7 +126,7 @@ try {
     const rect = bar.getBoundingClientRect()
     const css = frame.contentWindow.getComputedStyle(bar)
     return { visible: css.display !== 'none' && rect.height > 0, bottom: css.bottom }
-  })
+  }, frameSelector)
   console.log('KEYBOARD_STATE=' + JSON.stringify(keyboard))
   assert.ok(keyboard.visible, 'La barra de formato no aparece cuando abre el teclado')
   assert.ok(parseFloat(keyboard.bottom) > 250, 'La barra de formato no queda elevada sobre el teclado')
