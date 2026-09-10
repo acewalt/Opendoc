@@ -1,47 +1,45 @@
 # Waltiva
 
-Waltiva es un visor/editor de documentos que funciona completamente en el navegador y está pensado para desplegarse en GitHub Pages.
+Waltiva es un escritorio local de documentos para navegador y GitHub Pages.
 
-## Funciones actuales
+## Arquitectura actual
 
-- Crear documentos nuevos desde una página en blanco.
-- Importar PDF, DOC, DOT, DOCX, DOCM, DOTX, DOTM, RTF, ODT, TXT, HTML, HTM, XML, MHT y MHTML.
-- PDF: vista original con PDF.js y reconstrucción del texto en páginas editables tipo Word.
-- DOCX / DOCM / DOTX / DOTM: renderizado Office Open XML con `docx-preview` y edición del DOM renderizado.
-- DOC / DOT (Word 97–2003): lectura local con JSDoc, incluyendo texto, estilos, tablas e imágenes rasterizadas recuperables.
-- RTF y ODT: importación y reconstrucción editable del contenido principal.
-- Editor con estilos de párrafo, fuentes, tamaños, negrita, cursiva, subrayado, tachado, subíndice, superíndice, colores, resaltado, alineación, listas, sangría, enlaces, imágenes, tablas, líneas, saltos de página, deshacer/rehacer y zoom.
-- Modo claro y modo noche.
-- Exportación a HTML editable.
-- Exportación a `.doc` compatible con Word basada en HTML.
-- Impresión / exportación a PDF desde el navegador.
-- Sin backend: los documentos no se suben a ningún servidor.
-- Regla de página estilo Word con márgenes izquierdo/derecho arrastrables.
-- Selector “Descargas / Archivos” y lista local de documentos importados recientemente.
+La rama `main` conserva únicamente la interfaz principal de Waltiva: biblioteca, creación/importación de documentos, recientes locales y el contenedor del editor.
 
-## Límites técnicos importantes
+El editor anterior basado en DOM, PDF.js, docx-preview y los módulos `editor-*`, `fidelity-*`, `free-transform`, `media`, `history`, `book-layout`, etc. fue retirado de `main`.
 
-PDF no es un formato de edición semántica. Waltiva conserva una vista original del PDF y genera una reconstrucción editable del texto. Esto funciona bien en documentos convencionales, pero no puede reconstruir de forma perfecta todas las fuentes incrustadas, columnas, fondos complejos, cuadros de texto, gráficos vectoriales o escaneos sin OCR.
+La edición se realiza ahora con el runtime de ONLYOFFICE 9.3 preparado para navegador y WebAssembly, publicado bajo `onlyoffice-preview/`. La integración usa `wasm-onlyoffice-sdk` y el conversor local `x2t` WebAssembly.
 
-La edición de DOCX de esta versión modifica el HTML renderizado. La exportación nativa de vuelta a `.docx` requiere un serializador OOXML/editor dedicado.
+## Flujo
 
-Los `.doc` binarios antiguos pueden contener OLE, WMF/EMF, macros y estructuras que un navegador no puede reproducir exactamente.
+- **Crear documento** abre el selector de tipo.
+- Se puede crear un Documento (`.docx`), Hoja de cálculo (`.xlsx`) o Presentación (`.pptx`).
+- Cada opción abre directamente el editor correspondiente de ONLYOFFICE en español.
+- **Importar documento** permite seleccionar archivos locales y enviarlos al editor embebido sin usar un backend propio.
+- Los archivos recientes se conservan mediante IndexedDB cuando el tamaño permite guardar una copia local.
+- El botón flotante **← Waltiva** vuelve al espacio de trabajo.
 
-## Dependencias CDN
+## Formatos conectados
 
-- PDF.js `pdfjs-dist@3.11.174`
-- JSZip `3.10.1`
-- docx-preview `0.3.6`
-- JSDoc (lector Word 97–2003, 0BSD), fijado al commit `821695a`
+DOCX, XLSX, PPTX, DOC, XLS, PPT, ODT, ODS, ODP, PDF, TXT, RTF y CSV.
 
-## GitHub Pages
+La compatibilidad final de lectura, edición y exportación depende de lo que soporte el motor ONLYOFFICE/x2t para cada formato.
 
-El proyecto no necesita compilación. GitHub Pages publica directamente desde la rama `main`.
+## Privacidad
+
+Waltiva no incorpora un servidor propio para subir documentos. La selección del archivo y la comunicación entre la biblioteca y el editor se realizan en el navegador.
+
+## Código
+
+- `index.html`: interfaz principal y selector Nuevo/Abrir.
+- `styles.css`: estilos base de la biblioteca y del contenedor del editor.
+- `library-redesign.css`: apariencia actual del menú principal.
+- `workspace.js`: navegación, tema, archivos recientes e integración con el editor.
+- `onlyoffice-preview/`: runtime publicado de ONLYOFFICE 9.3 + x2t WASM.
+- `onlyoffice-engine`: rama fuente utilizada para construir y validar la integración de ONLYOFFICE.
+
+## Despliegue
+
+GitHub Pages publica desde `main`.
 
 Sitio: `https://acewalt.github.io/Waltiva/`
-
-Repositorio: `https://github.com/acewalt/Waltiva`
-
-## Próximas mejoras
-
-Para acercarse a una conversión PDF → DOCX editable con mayor fidelidad, la arquitectura debe incorporar un motor OOXML real, análisis de layout y OCR para PDFs escaneados.
