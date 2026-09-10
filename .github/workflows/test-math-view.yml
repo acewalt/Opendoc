@@ -25,7 +25,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm exec playwright install --with-deps chromium
-      - name: Inspeccionar conversión matemática del modelo Word
+      - name: Probar inserción LaTeX como ecuación nativa
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
@@ -49,54 +49,74 @@ jobs:
             await page.waitForFunction(() => document.querySelectorAll('iframe').length > 0, null, { timeout: 120000 });
             await page.waitForTimeout(8000);
 
-            const diagnostics = await page.evaluate(() => {
+            const result = await page.evaluate(async () => {
               const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
               const win = frame && frame.contentWindow;
-              const api = win?.DE?.getController?.('Toolbar')?.api ||
-                win?.DE?.getController?.('Main')?.api ||
-                win?.DE?.getController?.('DocumentHolder')?.api ||
-                win?.Asc?.editor || null;
+              const api = win?.DE?.getController?.('Toolbar')?.api || win?.Asc?.editor || null;
               if (!win || !api) return { error: 'bridge unavailable' };
 
-              const logic = typeof api.Gg === 'function' ? api.Gg() : null;
-              if (!logic) return { error: 'logic document unavailable' };
+              const fnSource = {};
+              for (const name of ['asc_AddMath','asc_AddMath2','asc_AddText','Add_Text','pluginMethod_InputText','pluginMethod_PasteText']) {
+                try {
+                  fnSource[name] = typeof api[name] === 'function' ? Function.prototype.toString.call(api[name]).slice(0, 3000) : null;
+                } catch (e) { fnSource[name] = String(e); }
+              }
 
-              const inspect = (obj, names) => {
-                const out = {};
-                for (const name of names) {
-                  try {
-                    const fn = obj[name];
-                    out[name] = typeof fn === 'function' ? {
-                      length: fn.length,
-                      source: Function.prototype.toString.call(fn).slice(0, 5000)
-                    } : { value: fn };
-                  } catch (e) {
-                    out[name] = { error: String(e) };
+              const describeSelection = () => {
+                const out = [];
+                try {
+                  const selected = api.getSelectedElements?.() || [];
+                  for (const item of selected) {
+                    out.push({ type: item.get_ObjectType?.(), ctor: item.get_ObjectValue?.()?.constructor?.name || null });
                   }
-                }
+                } catch (e) { out.push({ error: String(e) }); }
                 return out;
               };
 
-              const logicNames = new Set();
-              let obj = logic;
-              for (let depth = 0; obj && depth < 8; depth++, obj = Object.getPrototypeOf(obj)) {
-                for (const name of Object.getOwnPropertyNames(obj)) logicNames.add(name);
-              }
-              const candidates = [...logicNames].filter(name => /TSd|v8e|I8e|fac|L0e|math|equat|convert|text|search|select/i.test(name)).sort();
-              const keyMethods = inspect(logic, ['TSd','v8e','I8e','fac','L0e','xYd','rz','mq','Op','Ewb','ec']);
+              const attempts = [];
+              const latex = '\\frac{x^2+1}{\\sqrt{y}}';
+              const oldType = api.asc_GetMathInputType?.();
+              api.asc_SetMathInputType?.(win.Asc.c_oAscMathInputType.LaTeX);
 
-              return {
-                logicType: logic.constructor?.name,
-                candidates,
-                keyMethods,
-                apiSources: inspect(api, ['asc_ConvertEquationToMath','asc_ConvertMathView','asc_SetMathInputType','asc_AddText','asc_EditSelectAll','asc_GetSelectedText']),
-                mathInputType: win.Asc?.c_oAscMathInputType,
-                currentInputType: api.asc_GetMathInputType?.(),
+              const runAttempt = async (label, action) => {
+                try {
+                  api.asc_EditSelectAll?.();
+                  if ((api.asc_GetSelectedText?.() || '').length) api.asc_Remove?.(-1, true, false, false, false);
+                  api.asc_RemoveSelection?.();
+                  await new Promise(r => setTimeout(r, 250));
+                  const before = describeSelection();
+                  const value = action();
+                  await new Promise(r => setTimeout(r, 700));
+                  const afterInsert = describeSelection();
+                  let convertResult = null;
+                  let convertError = null;
+                  try { convertResult = api.asc_ConvertMathView?.(false, false); } catch (e) { convertError = String(e); }
+                  await new Promise(r => setTimeout(r, 400));
+                  const afterConvert = describeSelection();
+                  const selectedText = api.asc_GetSelectedText?.();
+                  attempts.push({ label, valueType: typeof value, before, afterInsert, afterConvert, selectedText, convertResult, convertError, inline: api.asc_IsInlineMath?.() });
+                } catch (e) {
+                  attempts.push({ label, error: String(e), stack: e?.stack });
+                } finally {
+                  try { api.Undo?.(); api.Undo?.(); api.Undo?.(); api.asc_RemoveSelection?.(); } catch {}
+                  await new Promise(r => setTimeout(r, 300));
+                }
               };
+
+              await runAttempt('AddMath2-string', () => api.asc_AddMath2?.(latex));
+              await runAttempt('AddMath-undefined-then-text', () => { api.asc_AddMath?.(); return api.asc_AddText?.(latex); });
+              await runAttempt('AddMath2-undefined-then-text', () => { api.asc_AddMath2?.(); return api.asc_AddText?.(latex); });
+              await runAttempt('AddMath-fraction-template-then-text', () => { api.asc_AddMath?.(16777216); return api.asc_AddText?.(latex); });
+
+              api.asc_SetMathInputType?.(oldType);
+              return { fnSource, attempts, mathType: win.Asc.c_oAscTypeSelectElement?.Math };
             });
 
-            console.log('WORD_MATH_MODEL=' + JSON.stringify(diagnostics, null, 2));
-            assert.ok(!diagnostics.error);
+            console.log('NATIVE_INSERT_RESULT=' + JSON.stringify(result, null, 2));
+            assert.ok(!result.error);
+            const successful = result.attempts.find(a => !a.error && [...(a.afterInsert || []), ...(a.afterConvert || [])].some(x => x.type === result.mathType));
+            assert.ok(successful, 'Ningún intento creó un objeto Math nativo');
+            console.log('SUCCESSFUL_NATIVE_PATH=' + successful.label);
             await browser.close();
           })().catch(error => {
             console.error(error);
