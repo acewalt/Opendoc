@@ -1,6 +1,6 @@
 <template>
-  <div class="home">
-    <div class="top-operation-bar" v-if="!docmentObj?.fileName">
+  <div class="home" :class="{ embedded: isEmbedded }">
+    <div class="top-operation-bar" v-if="!isEmbedded && !docmentObj?.fileName">
       <el-button type="primary" @click="showCreateDialog = true">Nuevo / Abrir archivo</el-button>
     </div>
 
@@ -12,13 +12,23 @@
         ref="documentHandler"
       />
 
-      <div class="main-content" v-else>
+      <div class="main-content" v-else-if="!isEmbedded">
         <h1>Bienvenido a Waltiva</h1>
         <p>Crea un documento nuevo o abre un archivo local para empezar.</p>
       </div>
+
+      <div class="embed-wait" v-else>
+        Preparando editor…
+      </div>
     </div>
 
-    <el-dialog v-model="showCreateDialog" title="Nuevo / Abrir archivo" width="450px" center>
+    <el-dialog
+      v-if="!isEmbedded"
+      v-model="showCreateDialog"
+      title="Nuevo / Abrir archivo"
+      width="450px"
+      center
+    >
       <div id="panel-createnew">
         <div class="header">Nuevo</div>
         <div class="thumb-list">
@@ -49,15 +59,29 @@
 
 <script lang="ts" setup>
 import { FolderOpened } from '@element-plus/icons-vue'
-import { onMounted, ref } from 'vue'
-import { DocmentType } from '@/utils/util'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import type { DocmentType } from '@/utils/util'
 import DocumentHandler from '../components/DocumentHandler.vue'
-import { useRoute } from 'vue-router'
 import { ElLoading } from 'element-plus'
 
 const showCreateDialog = ref(false)
 const documentHandler = ref<InstanceType<typeof DocumentHandler> | null>(null)
 const docmentObj = ref<DocmentType | null>(null)
+const isEmbedded = ref(false)
+
+const ACCEPTED_FILES = '.docx,.xlsx,.pptx,.doc,.xls,.ppt,.odt,.ods,.odp,.pdf,.txt,.rtf,.csv'
+
+function queryValue(name: string): string | null {
+  const direct = new URLSearchParams(window.location.search).get(name)
+  if (direct !== null) return direct
+
+  const hash = window.location.hash || ''
+  const queryIndex = hash.indexOf('?')
+  if (queryIndex >= 0) {
+    return new URLSearchParams(hash.slice(queryIndex + 1)).get(name)
+  }
+  return null
+}
 
 const onCreateNew = (ext: string) => {
   const names: Record<string, string> = {
@@ -73,34 +97,51 @@ const onCreateNew = (ext: string) => {
   showCreateDialog.value = false
 }
 
+function openLocalFile(file: File) {
+  docmentObj.value = {
+    fileName: file.name,
+    file,
+  }
+  showCreateDialog.value = false
+}
+
 const onOpenDocument = async () => {
   const input = document.createElement('input')
   input.type = 'file'
-  input.accept = '.docx,.xlsx,.pptx,.doc,.xls,.ppt'
+  input.accept = ACCEPTED_FILES
 
   input.onchange = (event) => {
     const file = (event.target as HTMLInputElement).files?.[0]
-    if (file) {
-      showCreateDialog.value = false
-      docmentObj.value = {
-        fileName: file.name,
-        file,
-      }
-    }
+    if (file) openLocalFile(file)
   }
 
   input.click()
 }
 
-async function initFileUrl() {
-  const route = useRoute()
-  const url = route.query.url as string | undefined
-  const filenameParam = route.query.filename as string | undefined
+function handleParentMessage(event: MessageEvent) {
+  if (!isEmbedded.value) return
+  if (event.origin !== window.location.origin || event.source !== window.parent) return
 
-  if (!url) {
-    console.info('No se proporcionó una URL de archivo.')
+  const payload = event.data
+  if (!payload || payload.type !== 'waltiva-open-file') return
+
+  const file = payload.file as File | undefined
+  if (!file || typeof file.name !== 'string' || typeof file.arrayBuffer !== 'function') {
+    window.parent.postMessage(
+      { type: 'waltiva-editor-error', message: 'El archivo recibido no es válido.' },
+      window.location.origin,
+    )
     return
   }
+
+  openLocalFile(file)
+}
+
+async function initFileUrl() {
+  const url = queryValue('url') || undefined
+  const filenameParam = queryValue('filename') || undefined
+
+  if (!url) return
 
   const loadingInstance = ElLoading.service({
     lock: true,
@@ -113,46 +154,56 @@ async function initFileUrl() {
     if (!res.ok) throw new Error('No se pudo descargar el archivo.')
 
     const blob = await res.blob()
-    let fileName = ''
-
-    if (filenameParam) {
-      fileName = filenameParam
-    }
+    let fileName = filenameParam || ''
 
     if (!fileName) {
       const match = decodeURIComponent(url).match(/\/([^\/?#]+)$/)
-      if (match && match[1].includes('.')) {
-        fileName = match[1]
-      }
+      if (match && match[1].includes('.')) fileName = match[1]
     }
 
     if (!fileName) {
       const disposition = res.headers.get('Content-Disposition')
       if (disposition) {
         const match = disposition.match(/filename\*=UTF-8''(.+)|filename="?([^"]+)"?/)
-        if (match) {
-          fileName = decodeURIComponent(match[1] || match[2])
-        }
+        if (match) fileName = decodeURIComponent(match[1] || match[2])
       }
     }
 
-    if (!fileName) {
-      console.error('No fue posible determinar el nombre del archivo.')
-      return
-    }
+    if (!fileName) throw new Error('No fue posible determinar el nombre del archivo.')
 
-    const file = new File([blob], fileName, { type: blob.type })
-    docmentObj.value = { fileName, file }
-    showCreateDialog.value = false
+    openLocalFile(new File([blob], fileName, { type: blob.type }))
   } catch (err) {
     console.error('Error al cargar el archivo:', err)
+    if (isEmbedded.value) {
+      window.parent.postMessage(
+        { type: 'waltiva-editor-error', message: err instanceof Error ? err.message : String(err) },
+        window.location.origin,
+      )
+    }
   } finally {
     loadingInstance.close()
   }
 }
 
 onMounted(() => {
-  initFileUrl()
+  isEmbedded.value = queryValue('embed') === '1'
+
+  window.addEventListener('message', handleParentMessage)
+
+  const requestedType = (queryValue('type') || '').toLowerCase()
+  if (requestedType === 'docx' || requestedType === 'xlsx' || requestedType === 'pptx') {
+    onCreateNew(`.${requestedType}`)
+  }
+
+  void initFileUrl()
+
+  if (isEmbedded.value && window.parent !== window) {
+    window.parent.postMessage({ type: 'waltiva-editor-ready' }, window.location.origin)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleParentMessage)
 })
 </script>
 
@@ -173,19 +224,26 @@ onMounted(() => {
 
 .editor-content {
   flex-grow: 1;
+  min-height: 0;
 }
 
-.main-content {
-  flex-grow: 1;
+.main-content,
+.embed-wait {
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
+}
 
-  h1 {
-    margin-bottom: 20px;
-  }
+.main-content h1 {
+  margin-bottom: 20px;
+}
+
+.embed-wait {
+  color: #737373;
+  font-size: 14px;
 }
 
 #panel-createnew {
@@ -232,14 +290,8 @@ onMounted(() => {
         word-break: break-word;
       }
 
-      &:hover {
-        background-color: #e0e0e0;
-      }
-
-      &:active {
-        color: rgba(0, 0, 0, 0.8);
-        background-color: #cbcbcb;
-      }
+      &:hover { background-color: #e0e0e0; }
+      &:active { color: rgba(0, 0, 0, 0.8); background-color: #cbcbcb; }
     }
   }
 }
