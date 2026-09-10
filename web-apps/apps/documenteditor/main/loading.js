@@ -9,7 +9,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 
     var MOBILE_MAX = 760
     var installed = false
-    var editing = true
+    var editing = false
     var nativeRibbon = false
     var syncTimer = null
     var waitTimer = null
@@ -34,6 +34,9 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         undo: svg('<path d="M9 7H4v-5"/><path d="M4.5 7.2A8 8 0 1 1 5 17"/>'),
         redo: svg('<path d="M15 7h5v-5"/><path d="M19.5 7.2A8 8 0 1 0 19 17"/>'),
         share: svg('<path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 12v8h14v-8"/>'),
+        viewer: svg('<rect x="7" y="3" width="10" height="18" rx="1.8"/><path d="M10 18h4"/>'),
+        read: svg('<path d="M6 18L11 5h2l5 13M8.5 12.5h7"/><path d="M18.5 7.5c1 1 1.5 2.2 1.5 3.5s-.5 2.5-1.5 3.5"/>'),
+        comment: svg('<path d="M4 5h16v11H9l-5 4z"/>'),
         plus: svg('<path d="M12 4v16M4 12h16"/>'),
         keyboard: svg('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M6 8h1M9 8h1M12 8h1M15 8h1M18 8h.1M6 11h1M9 11h1M12 11h1M15 11h1M18 11h.1M7 14h10M10 20l2 2 2-2"/>'),
         page: svg('<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 7h8M8 11h8M8 15h6"/>'),
@@ -84,8 +87,13 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             '.wlt-mobile-btn.wlt-done{padding:0 8px 0 2px;font-size:17px;font-weight:500;}',
             '.wlt-mobile-btn.wlt-close{min-width:40px;padding-left:2px;}',
             '.wlt-mobile-btn.wlt-disabled{opacity:.35;pointer-events:none;}',
-            '.wlt-mobile-formatbar{position:fixed;z-index:12000;left:50%;bottom:calc(10px + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:calc(100% - 28px);max-width:560px;height:58px;padding:0 8px;display:flex;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:30px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);will-change:bottom;}',
-            'body.waltiva-mobile-view-mode .wlt-mobile-formatbar{display:none;}',
+            '.wlt-mobile-formatbar{position:fixed;z-index:12000;left:50%;bottom:calc(10px + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:calc(100% - 28px);max-width:560px;height:58px;padding:0 8px;display:none;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:30px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);will-change:bottom;}',
+            'body.waltiva-mobile-ui.waltiva-mobile-keyboard-open:not(.waltiva-mobile-view-mode) .wlt-mobile-formatbar{display:flex;}',
+            '.wlt-mobile-viewbar{position:fixed;z-index:12000;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(320px,calc(100% - 62px));height:58px;padding:0 9px;display:none;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:30px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}',
+            'body.waltiva-mobile-view-mode .wlt-mobile-viewbar{display:flex;}',
+            'body.waltiva-mobile-keyboard-open .wlt-mobile-viewbar{display:none;}',
+            '.wlt-mobile-viewbar .wlt-mobile-btn{height:46px;min-width:52px;padding:0 11px;border-radius:20px;}',
+            '.wlt-mobile-viewbar .wlt-mobile-btn svg{width:27px;height:27px;}',
             '.wlt-mobile-formatbar .wlt-mobile-btn{height:46px;min-width:42px;padding:0 8px;border-radius:20px;font-size:21px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
             '.wlt-mobile-formatbar .wlt-mobile-btn svg{width:25px;height:25px;}',
             '.wlt-mobile-formatbar .wlt-mobile-btn.wlt-active{background:#fff;color:#202020;}',
@@ -263,8 +271,14 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         editing = !!value
         document.body.classList.toggle('waltiva-mobile-view-mode', !editing)
         closeSheet()
-        if (!editing) hideKeyboard()
+        if (!editing) {
+            hideKeyboard()
+            keyboardOffset = 0
+            document.documentElement.style.setProperty('--wlt-keyboard-offset', '0px')
+            document.body.classList.remove('waltiva-mobile-keyboard-open')
+        }
         setTimeout(resizeEditor, 50)
+        setTimeout(function () { fitWidthWhenReady(0) }, 120)
     }
 
     function toggleNativeRibbon() {
@@ -290,6 +304,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         switch (action) {
             case 'done': setEditing(false); return
             case 'edit': setEditing(true); return
+            case 'fit-width': fitWidthWhenReady(0); toast('Documento ajustado al ancho.'); return
             case 'close-document': closeDocument(); return
             case 'insert': openSheet('insertar'); return
             case 'format': openSheet('inicio'); return
@@ -307,6 +322,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             case 'fontcolor': ok = clickControl(['.toolbar .btn-fontcolor', '.btn-fontcolor']); break
             case 'search': closeSheet(); ok = clickControl(['.btn-menu-search', '[title*="Buscar"]', '[title*="Search"]']); break
             case 'share': closeSheet(); ok = clickControl(['.btn-share', '.btn-header-share', '[title*="Compartir"]', '[title*="Share"]'], 'Compartir no está habilitado en este documento.'); break
+            case 'comment': closeSheet(); ok = clickControl(['.btn-comments', '.btn-menu-comments', '[title*="Comentario"]', '[title*="Comment"]'], 'Los comentarios no están disponibles.'); break
             case 'page': closeSheet(); ok = clickControl(['.toolbar .btn-blankpage', '.toolbar .btn-pagebreak', '.btn-blankpage', '.btn-pagebreak']); break
             case 'table': closeSheet(); ok = clickControl(['.toolbar .btn-inserttable', '.btn-inserttable']); break
             case 'image':
@@ -335,6 +351,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
     }
 
     function syncFormatting() {
+        updateVisualViewport(false)
         var map = {
             bold: ['.toolbar .btn-bold', '.btn-bold'],
             italic: ['.toolbar .btn-italic', '.btn-italic'],
@@ -371,16 +388,27 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         if (attempt < 50) setTimeout(function () { fitWidthWhenReady(attempt + 1) }, 300)
     }
 
+    function getVisualViewportSource() {
+        try {
+            if (window.parent && window.parent !== window && window.parent.visualViewport) return window.parent.visualViewport
+        } catch (e) {}
+        return window.visualViewport || null
+    }
+
     function updateVisualViewport(resetBase) {
-        var vv = window.visualViewport
+        var vv = getVisualViewportSource()
         if (!vv || !document.documentElement) return
-        var visibleBottom = Math.max(0, Math.round(vv.height + vv.offsetTop))
+        var visibleBottom = Math.max(0, Math.round(vv.height + (vv.offsetTop || 0)))
         if (resetBase || !maxVisualViewportHeight || visibleBottom > maxVisualViewportHeight) {
             maxVisualViewportHeight = visibleBottom
         }
         var nextOffset = Math.max(0, maxVisualViewportHeight - visibleBottom)
-        // Cambios pequeños suelen ser solo la barra de Safari; el teclado ocupa bastante más.
-        if (nextOffset < 80) nextOffset = 0
+        // Safari puede mover sus barras unos pocos píxeles; el teclado produce una reducción mucho mayor.
+        if (nextOffset < 110) nextOffset = 0
+        if (nextOffset > 0 && !editing) {
+            editing = true
+            if (document.body) document.body.classList.remove('waltiva-mobile-view-mode')
+        }
         if (keyboardOffset === nextOffset) return
         keyboardOffset = nextOffset
         document.documentElement.style.setProperty('--wlt-keyboard-offset', keyboardOffset + 'px')
@@ -401,18 +429,29 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         var mask = document.getElementById('wlt-mobile-sheet-mask')
         if (mask) mask.addEventListener('click', closeSheet)
 
-        if (window.visualViewport) {
+        var visualViewportSource = getVisualViewportSource()
+        if (visualViewportSource) {
             var onVisualViewportChange = function () {
                 updateVisualViewport(false)
                 setTimeout(resizeEditor, 40)
             }
-            window.visualViewport.addEventListener('resize', onVisualViewportChange)
-            window.visualViewport.addEventListener('scroll', onVisualViewportChange)
+            visualViewportSource.addEventListener('resize', onVisualViewportChange)
+            visualViewportSource.addEventListener('scroll', onVisualViewportChange)
         }
+        try {
+            if (window.parent && window.parent !== window) {
+                window.parent.addEventListener('resize', function () {
+                    updateVisualViewport(false)
+                    setTimeout(resizeEditor, 60)
+                })
+            }
+        } catch (e) {}
         window.addEventListener('resize', function () {
             updateVisualViewport(false)
             setTimeout(resizeEditor, 60)
         })
+        document.addEventListener('focusin', function () { setTimeout(function () { updateVisualViewport(false) }, 80) }, true)
+        document.addEventListener('focusout', function () { setTimeout(function () { updateVisualViewport(false) }, 180) }, true)
         window.addEventListener('orientationchange', function () {
             maxVisualViewportHeight = 0
             setTimeout(function () {
@@ -434,6 +473,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 
         document.documentElement.classList.add('waltiva-mobile-root')
         document.body.classList.add('waltiva-mobile-ui')
+        document.body.classList.add('waltiva-mobile-view-mode')
         updateVisualViewport(true)
 
         var topbar = document.createElement('div')
@@ -470,6 +510,16 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             makeButton('', 'Color del texto', icons.color, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="fontcolor"') +
             makeButton('', 'Ocultar teclado', icons.keyboard, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="keyboard"')
         document.body.appendChild(formatbar)
+
+        var viewbar = document.createElement('div')
+        viewbar.id = 'wlt-mobile-viewbar'
+        viewbar.className = 'wlt-mobile-viewbar'
+        viewbar.innerHTML =
+            makeButton('', 'Ajustar documento', icons.viewer, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="fit-width"') +
+            makeButton('', 'Formato', icons.read, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="format"') +
+            makeButton('', 'Comentarios', icons.comment, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="comment"') +
+            makeButton('', 'Compartir', icons.share, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="share"')
+        document.body.appendChild(viewbar)
 
         var mask = document.createElement('div')
         mask.id = 'wlt-mobile-sheet-mask'
