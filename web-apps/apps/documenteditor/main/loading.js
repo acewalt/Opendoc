@@ -3,7 +3,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 /* Waltiva Mobile UI -------------------------------------------------------
  * Capa de interfaz responsive sobre ONLYOFFICE. Mantiene el motor y los
  * comandos originales, pero evita comprimir el ribbon de escritorio en iOS.
- * Waltiva Mobile UX v4.1: lienzo móvil estable, zoom legible y herramientas superiores fijas.
+ * Waltiva Mobile UX v4.2: navegación táctil nativa, selección móvil y lienzo sin franja.
  */
 (function () {
     'use strict'
@@ -19,7 +19,9 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
     var keyboardOffset = 0
     var maxVisualViewportHeight = 0
     var visualTop = 0
-    var MOBILE_READABLE_ZOOM = 80
+    var MOBILE_CONTENT_ZOOM_MIN = 56
+    var MOBILE_CONTENT_ZOOM_MAX = 72
+    var MOBILE_CONTENT_ZOOM_FACTOR = 1.10
 
     function isMobileLayout() {
         if (window.matchMedia && window.matchMedia('(max-width: ' + MOBILE_MAX + 'px)').matches) return true
@@ -80,6 +82,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             'body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vert_ruler,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vertical_scroll,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vscrollbar,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_buttonTabs{width:0!important;min-width:0!important;max-width:0!important;}',
             'body.waltiva-mobile-ui .toolbar{height:0!important;min-height:0!important;max-height:0!important;overflow:hidden!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;border:0!important;box-shadow:none!important;}',
             'body.waltiva-mobile-ui .statusbar{height:0!important;min-height:0!important;max-height:0!important;overflow:hidden!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}',
+            'body.waltiva-mobile-ui #header,body.waltiva-mobile-ui #box-document-title,body.waltiva-mobile-ui #box-doc-name{display:none!important;height:0!important;min-height:0!important;max-height:0!important;overflow:hidden!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;border:0!important;}',
             'body.waltiva-mobile-ui.waltiva-mobile-native-ribbon .toolbar{height:99px!important;min-height:99px!important;max-height:none!important;overflow:visible!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}',
             'body.waltiva-mobile-ui.waltiva-mobile-native-ribbon .statusbar{height:25px!important;min-height:25px!important;max-height:25px!important;overflow:visible!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}',
             '.wlt-mobile-topbar{position:fixed;z-index:12000;top:var(--wlt-visual-top);left:0;right:0;height:calc(var(--wlt-mobile-top) + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 10px 0;display:flex;align-items:center;background:#4b4b4b;color:#fff;border-bottom:1px solid rgba(255,255,255,.13);font:16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none;will-change:top;}',
@@ -722,6 +725,35 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         })
     }
 
+    function getNativeMobileTouchManager() {
+        try {
+            var api = getEditorApi()
+            return api && api.WordControl && api.WordControl.MobileTouchManager || null
+        } catch (e) {
+            return null
+        }
+    }
+
+    function refreshNativeTouchScroller() {
+        try {
+            var manager = getNativeMobileTouchManager()
+            if (manager && manager.iScroll && typeof manager.iScroll.refresh === 'function') {
+                manager.iScroll.refresh()
+            }
+        } catch (e) {}
+    }
+
+    function resetMobileDocumentOrigin() {
+        try {
+            var api = getEditorApi()
+            var wordControl = api && api.WordControl
+            var hor = wordControl && wordControl.m_oScrollHorApi
+            var ver = wordControl && wordControl.m_oScrollVerApi
+            if (hor && typeof hor.scrollToX === 'function') hor.scrollToX(0, false)
+            if (ver && typeof ver.scrollToY === 'function') ver.scrollToY(0, false)
+        } catch (e) {}
+    }
+
     function getCurrentZoomPercent(api) {
         try {
             var value = api && api.WordControl && api.WordControl.m_nZoomValue
@@ -738,6 +770,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         var next = Math.max(50, Math.min(500, Math.round(value)))
         try {
             api.zoom(next)
+            setTimeout(refreshNativeTouchScroller, 30)
             return true
         } catch (error) {
             console.debug('Waltiva Mobile: no se pudo aplicar el zoom.', error)
@@ -749,8 +782,14 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         var api = getEditorApi()
         if (!api) return false
         var current = getCurrentZoomPercent(api)
-        if (current >= MOBILE_READABLE_ZOOM) return true
-        return setDocumentZoom(MOBILE_READABLE_ZOOM)
+        var target = Math.round(current * MOBILE_CONTENT_ZOOM_FACTOR)
+        target = Math.max(MOBILE_CONTENT_ZOOM_MIN, Math.min(MOBILE_CONTENT_ZOOM_MAX, target))
+        var ok = current >= target ? true : setDocumentZoom(target)
+        setTimeout(function () {
+            resetMobileDocumentOrigin()
+            refreshNativeTouchScroller()
+        }, 90)
+        return ok
     }
 
     function bindDocumentTouchNavigation() {
@@ -760,13 +799,10 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         var pendingZoom = 100
         var zoomFrame = 0
 
-        var panTracking = false
-        var panActive = false
-        var panStartX = 0
-        var panStartY = 0
-        var panStartScrollX = 0
-        var panStartScrollY = 0
-        var PAN_THRESHOLD = 7
+        function nativeTouchReady() {
+            var manager = getNativeMobileTouchManager()
+            return !!(manager && manager.iScroll)
+        }
 
         function insideViewport(target) {
             return !!(target && (target.id === 'viewport' || (target.closest && target.closest('#viewport'))))
@@ -779,45 +815,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             return Math.sqrt(dx * dx + dy * dy)
         }
 
-        function getScrollState() {
-            var api = getEditorApi()
-            var wordControl = api && api.WordControl
-            var hor = wordControl && wordControl.m_oScrollHorApi
-            var ver = wordControl && wordControl.m_oScrollVerApi
-            if (!hor || !ver) return null
-            if (typeof hor.getCurScrolledX !== 'function' || typeof ver.getCurScrolledY !== 'function') return null
-            return {
-                hor: hor,
-                ver: ver,
-                x: hor.getCurScrolledX(),
-                y: ver.getCurScrolledY()
-            }
-        }
-
-        function maxX(scroll) {
-            try {
-                if (typeof scroll.getMaxScrolledX === 'function') return scroll.getMaxScrolledX()
-            } catch (e) {}
-            return Number.MAX_SAFE_INTEGER || 9007199254740991
-        }
-
-        function maxY(scroll) {
-            try {
-                if (typeof scroll.getMaxScrolledY === 'function') return scroll.getMaxScrolledY()
-            } catch (e) {}
-            return Number.MAX_SAFE_INTEGER || 9007199254740991
-        }
-
-        function applyPan(dx, dy) {
-            var state = getScrollState()
-            if (!state) return false
-            var nextX = Math.max(0, Math.min(maxX(state.hor), panStartScrollX - dx))
-            var nextY = Math.max(0, Math.min(maxY(state.ver), panStartScrollY - dy))
-            if (typeof state.hor.scrollToX === 'function') state.hor.scrollToX(nextX)
-            if (typeof state.ver.scrollToY === 'function') state.ver.scrollToY(nextY)
-            return true
-        }
-
         function scheduleZoom(value) {
             pendingZoom = value
             if (zoomFrame) return
@@ -828,90 +825,55 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             })
         }
 
-        function resetTouchState() {
-            pinchActive = false
-            startDistance = 0
-            panTracking = false
-            panActive = false
-        }
-
         document.addEventListener('touchstart', function (event) {
             if (!insideViewport(event.target) || !event.touches) return
 
-            if (event.touches.length === 2) {
-                panTracking = false
-                panActive = false
-                var api = getEditorApi()
-                if (!api || typeof api.zoom !== 'function') return
-                startDistance = distance(event.touches)
-                if (!startDistance) return
-                startZoom = getCurrentZoomPercent(api)
-                pendingZoom = startZoom
-                pinchActive = true
-                event.preventDefault()
-                event.stopPropagation()
+            // Native ONLYOFFICE mobile input must receive one-finger movement,
+            // long press and selection-handle drags without Waltiva intercepting it.
+            if (nativeTouchReady()) {
+                pinchActive = false
                 return
             }
 
-            if (event.touches.length === 1) {
-                var state = getScrollState()
-                if (!state) return
-                pinchActive = false
-                panTracking = true
-                panActive = false
-                panStartX = event.touches[0].clientX
-                panStartY = event.touches[0].clientY
-                panStartScrollX = state.x
-                panStartScrollY = state.y
-            }
+            if (event.touches.length !== 2) return
+            var api = getEditorApi()
+            if (!api || typeof api.zoom !== 'function') return
+            startDistance = distance(event.touches)
+            if (!startDistance) return
+            startZoom = getCurrentZoomPercent(api)
+            pendingZoom = startZoom
+            pinchActive = true
+            event.preventDefault()
+            event.stopPropagation()
         }, { passive: false, capture: true })
 
         document.addEventListener('touchmove', function (event) {
             if (!insideViewport(event.target) || !event.touches) return
-
-            if (pinchActive && event.touches.length === 2) {
-                var currentDistance = distance(event.touches)
-                if (!currentDistance || !startDistance) return
-                event.preventDefault()
-                event.stopPropagation()
-                scheduleZoom(startZoom * (currentDistance / startDistance))
+            if (nativeTouchReady()) {
+                pinchActive = false
                 return
             }
-
-            if (panTracking && event.touches.length === 1) {
-                var dx = event.touches[0].clientX - panStartX
-                var dy = event.touches[0].clientY - panStartY
-                if (!panActive && Math.sqrt(dx * dx + dy * dy) >= PAN_THRESHOLD) panActive = true
-                if (!panActive) return
-                event.preventDefault()
-                event.stopPropagation()
-                applyPan(dx, dy)
-            }
+            if (!pinchActive || event.touches.length !== 2) return
+            var currentDistance = distance(event.touches)
+            if (!currentDistance || !startDistance) return
+            event.preventDefault()
+            event.stopPropagation()
+            scheduleZoom(startZoom * (currentDistance / startDistance))
         }, { passive: false, capture: true })
 
         document.addEventListener('touchend', function (event) {
-            if (pinchActive && (!event.touches || event.touches.length < 2)) {
+            if (!event.touches || event.touches.length < 2) {
                 pinchActive = false
                 startDistance = 0
+                setTimeout(refreshNativeTouchScroller, 20)
             }
-            if (panTracking && (!event.touches || event.touches.length === 0)) {
-                if (panActive) {
-                    event.preventDefault()
-                    event.stopPropagation()
-                }
-                panTracking = false
-                panActive = false
-            }
-        }, { passive: false, capture: true })
+        }, { passive: true, capture: true })
 
-        document.addEventListener('touchcancel', resetTouchState, { passive: true, capture: true })
-
-        document.addEventListener('gesturestart', function (event) {
-            if (insideViewport(event.target)) event.preventDefault()
-        }, { passive: false, capture: true })
-        document.addEventListener('gesturechange', function (event) {
-            if (insideViewport(event.target)) event.preventDefault()
-        }, { passive: false, capture: true })
+        document.addEventListener('touchcancel', function () {
+            pinchActive = false
+            startDistance = 0
+            setTimeout(refreshNativeTouchScroller, 20)
+        }, { passive: true, capture: true })
     }
 
     function performAction(action) {
@@ -1054,6 +1016,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         try { window.dispatchEvent(new Event('resize')) } catch (e) {
             var ev = document.createEvent('Event'); ev.initEvent('resize', true, true); window.dispatchEvent(ev)
         }
+        setTimeout(refreshNativeTouchScroller, 30)
     }
 
     function syncTitle() {
