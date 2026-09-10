@@ -1,0 +1,91 @@
+name: Importar onlyoffice-web-local
+
+on:
+  push:
+    paths:
+      - '.github/workflows/bootstrap-import.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Waltiva
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Clonar upstream fijado
+        run: |
+          git clone https://github.com/sweetwisdom/onlyoffice-web-local.git /tmp/upstream
+          cd /tmp/upstream
+          git checkout c4905016372a633cfba59a78f0acb3f029c85883
+
+      - name: Copiar repo completa salvo workflows
+        run: |
+          rsync -a --delete \
+            --exclude='.git' \
+            --exclude='.github' \
+            /tmp/upstream/ ./
+
+      - name: Traducir interfaz propia al español
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/views/HomeView.vue')
+          s = p.read_text(encoding='utf-8')
+          replacements = {
+              '新建/打开文件': 'Nuevo / Abrir archivo',
+              '欢迎使用文档编辑器': 'Bienvenido al editor de documentos',
+              '点击顶部按钮开始创建或打开文档': 'Usa el botón superior para crear o abrir un documento',
+              '>新建<': '>Nuevo<',
+              '>文档<': '>Documento<',
+              '>表格<': '>Hoja de cálculo<',
+              '>演示文稿<': '>Presentación<',
+              '>打开<': '>Abrir<',
+              '打开本地文件': 'Abrir archivo local',
+              "fileName: '新建文档' + ext": "fileName: 'Nuevo documento' + ext",
+              "console.warn('未提供文件 URL')": "console.warn('No se proporcionó una URL de archivo')",
+              "throw new Error('文件请求失败')": "throw new Error('No se pudo solicitar el archivo')",
+              "console.error('无法确定文件名，拒绝打开')": "console.error('No se pudo determinar el nombre del archivo')",
+              "console.error('加载文件失败:', err)": "console.error('Error al cargar el archivo:', err)",
+          }
+          for a,b in replacements.items():
+              s = s.replace(a,b)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('src/components/DocumentHandler.vue')
+          s = p.read_text(encoding='utf-8')
+          replacements = {
+              'element-loading-text="Loading..."': 'element-loading-text="Cargando..."',
+              "lang: 'zh'": "lang: 'es'",
+              "label: 'Guest'": "label: 'Invitado'",
+              "alert('文件打开失败，请检查文件格式')": "alert('No se pudo abrir el archivo. Comprueba su formato.')",
+              "throw new Error(`不支持的文件类型: ${fileType}`)": "throw new Error(`Tipo de archivo no compatible: ${fileType}`)",
+              "if (!file) throw new Error('无效的文件对象')": "if (!file) throw new Error('Archivo no válido')",
+              "console.error('文档操作失败:', error)": "console.error('Error al procesar el documento:', error)",
+              "alert(`文档操作失败: ${error.message}`)": "alert(`Error al procesar el documento: ${error.message}`)",
+              "console.log('文档加载完成:', fileName)": "console.log('Documento cargado:', fileName)",
+              "alert('无法加载编辑器组件。请确保已正确安装 OnlyOffice API。')": "alert('No se pudo cargar el editor. Comprueba que la API de ONLYOFFICE esté disponible.')",
+          }
+          for a,b in replacements.items():
+              s = s.replace(a,b)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('<html lang="">', '<html lang="es">')
+          s = s.replace('<title>Local office</title>', '<title>Waltiva</title>')
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Commit de importación
+        run: |
+          git config user.name 'walt_to_art'
+          git config user.email 'guard.mauricio.save@gmail.com'
+          git add -A
+          git commit -m 'Importar onlyoffice-web-local y traducir interfaz al español'
+          git push origin main
