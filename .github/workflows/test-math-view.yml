@@ -48,11 +48,11 @@ jobs:
             await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
-            await page.locator('#iframe iframe').waitFor({ state: 'attached', timeout: 30000 });
-            await page.getByRole('switch', { name: /Vista matemática/i }).waitFor({ state: 'visible', timeout: 30000 });
 
-            await page.getByRole('switch', { name: /Vista matemática/i }).click();
-            assert.equal(await page.getByRole('switch', { name: /Vista matemática/i }).getAttribute('aria-checked'), 'true');
+            const toggle = page.getByRole('switch', { name: /Vista matemática/i });
+            await toggle.waitFor({ state: 'visible', timeout: 30000 });
+            await toggle.click();
+            assert.equal(await toggle.getAttribute('aria-checked'), 'true');
 
             const input = page.locator('#waltiva-math-source');
             await input.fill('\\frac{x^2+1}{\\sqrt{y}}');
@@ -61,8 +61,13 @@ jobs:
             assert.equal(await page.locator('.math-render msup').count(), 1, 'Debe renderizar un superíndice');
             assert.equal(await page.locator('.math-render msqrt').count(), 1, 'Debe renderizar una raíz');
 
+            await page.waitForFunction(() => document.querySelectorAll('iframe').length > 0, null, { timeout: 120000 });
+            const frames = await page.evaluate(() => Array.from(document.querySelectorAll('iframe')).map(frame => ({ id: frame.id, name: frame.name, src: frame.src })));
+            console.log('Iframes encontrados:', frames);
+
+            await page.waitForTimeout(8000);
             const bridge = await page.evaluate(() => {
-              const frame = document.querySelector('#iframe iframe');
+              const frame = document.querySelector('#iframe iframe') || document.querySelector('iframe#frameEditor') || document.querySelector('iframe');
               const win = frame && frame.contentWindow;
               if (!win) return { hasWindow: false, hasDE: false, hasApi: false, hasSelectedText: false };
               const api = win.DE?.getController?.('Toolbar')?.api ||
