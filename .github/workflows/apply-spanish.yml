@@ -27,10 +27,8 @@ jobs:
           from pathlib import Path
           import gzip
           import json
-          import re
           import urllib.request
 
-          # DocumentServer v7.4.1 fija web-apps exactamente en este commit.
           WEBAPPS_COMMIT = '1e0cc82ea07fbc3d584c5644ec13873a1600be7e'
           BASE = f'https://raw.githubusercontent.com/ONLYOFFICE/web-apps/{WEBAPPS_COMMIT}/apps'
           editors = ('documenteditor', 'spreadsheeteditor', 'presentationeditor')
@@ -50,7 +48,6 @@ jobs:
               es_module = f'{editor}/main/locale/es.json'
               zh_marker = f'define("{zh_module}",'
               es_marker = f'define("{es_module}",'
-
               if zh_marker not in text:
                   raise RuntimeError(f'No se encontró el locale original {zh_module} en {bundle}')
 
@@ -59,8 +56,6 @@ jobs:
               if not isinstance(es_locale, dict) or len(es_locale) < 100:
                   raise RuntimeError(f'Locale español inesperadamente pequeño para {editor}')
 
-              # RequireJS acepta un objeto literal como valor de un módulo AMD.
-              # Se inserta junto al locale zh existente; no se reemplaza ni se elimina ningún locale original.
               if es_marker not in text:
                   payload = json.dumps(es_locale, ensure_ascii=False, separators=(',', ':'))
                   insertion = f'define("{es_module}",{payload});'
@@ -68,11 +63,8 @@ jobs:
                   text = text[:pos] + insertion + text[pos:]
                   bundle.write_text(text, encoding='utf-8')
                   write_gzip(bundle.with_suffix('.js.gz'), text.encode('utf-8'))
-
               print(f'{editor}: locale es añadido con {len(es_locale)} claves; zh conservado')
 
-          # Fórmulas de Spreadsheet: añadir los recursos españoles compatibles.
-          # Se conservan intactos zh.json/zh_desc.json; el locale configurado decidirá cuál cargar.
           formula_dir = Path('public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang')
           for name in ('es.json', 'es_desc.json'):
               raw = download(f'{BASE}/spreadsheeteditor/main/resources/formula-lang/{name}')
@@ -84,7 +76,6 @@ jobs:
               write_gzip(formula_dir / f'{name}.gz', raw)
               print(f'formula-lang/{name}: {len(parsed)} entradas')
 
-          # El wrapper ya envía lang=es. Cambiar también el fallback global de DocsAPI.
           api = Path('public/web-apps/apps/api/documents/api.js')
           api_text = api.read_text(encoding='utf-8')
           old = 'editorConfig:{lang:"en",canCoAuthoring'
@@ -97,7 +88,6 @@ jobs:
           elif new not in api_text:
               raise RuntimeError('No se encontró el fallback de editorConfig.lang en api.js')
 
-          # Terminar únicamente cadenas de idioma visibles o diagnósticos del wrapper.
           home = Path('src/views/HomeView.vue')
           home_text = home.read_text(encoding='utf-8').replace("text: 'Loading'", "text: 'Cargando...'", 1)
           home.write_text(home_text, encoding='utf-8')
@@ -124,18 +114,14 @@ jobs:
               handler_text = handler_text.replace(source, target)
           handler.write_text(handler_text, encoding='utf-8')
 
-          # Auditoría de configuración: no deben quedar fallbacks explícitos en inglés/chino
-          # en los inicializadores que controlan el idioma del editor.
-          assert "lang: 'es'" in handler_text, 'DocumentHandler no inicializa el editor en español'
-          assert 'editorConfig:{lang:"es",canCoAuthoring' in api_text, 'DocsAPI no tiene fallback español'
-          assert "text: 'Cargando...'" in home_text, 'El indicador de carga externo no quedó traducido'
-          assert 'Acerca de Waltiva' in about_text, 'La vista Acerca de no quedó traducida'
-
+          assert "lang: 'es'" in handler_text
+          assert 'editorConfig:{lang:"es",canCoAuthoring' in api_text
+          assert "text: 'Cargando...'" in home_text
+          assert 'Acerca de Waltiva' in about_text
           for editor in editors:
               text = Path(f'public/web-apps/apps/{editor}/main/app.js').read_text(encoding='utf-8')
               assert text.count(f'define("{editor}/main/locale/es.json",') == 1
               assert text.count(f'define("{editor}/main/locale/zh.json",') == 1
-
           print('Localización compatible con ONLYOFFICE 7.4.1 preparada correctamente.')
           PY
 
@@ -148,7 +134,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           candidates = [
               Path('src/components/DocumentHandler.vue'),
               Path('src/views/HomeView.vue'),
@@ -169,13 +154,14 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run build
 
-      - name: Smoke test de los tres editores en Chromium
+      - name: Diagnosticar y validar los tres editores en Chromium
         run: |
           pnpm exec playwright install --with-deps chromium
           cp e2e/vue.spec.ts /tmp/original-vue.spec.ts
           cat > e2e/vue.spec.ts <<'TS'
           import { test, expect } from '@playwright/test'
 
+          test.setTimeout(120000)
           const cases = [
             { label: 'Documento', editor: 'documenteditor' },
             { label: 'Hoja de cálculo', editor: 'spreadsheeteditor' },
@@ -184,20 +170,55 @@ jobs:
 
           for (const item of cases) {
             test(`crea ${item.label} con interfaz española`, async ({ page }) => {
+              page.on('console', msg => console.log(`[browser:${item.editor}:${msg.type()}] ${msg.text()}`))
+              page.on('pageerror', err => console.log(`[pageerror:${item.editor}] ${err.message}`))
+              page.on('requestfailed', req => console.log(`[requestfailed:${item.editor}] ${req.url()} :: ${req.failure()?.errorText}`))
+              page.on('response', res => {
+                if (res.status() >= 400) console.log(`[http:${item.editor}] ${res.status()} ${res.url()}`)
+              })
+
               await page.goto('/')
               await page.getByRole('button', { name: 'Nuevo / Abrir archivo' }).click()
               await page.getByText(item.label, { exact: true }).click()
 
               const iframe = page.locator('iframe[name="frameEditor"]')
-              await expect(iframe).toBeVisible({ timeout: 60000 })
-              await expect(iframe).toHaveAttribute('src', new RegExp(`${item.editor}/main/index(?:_loader)?\\.html.*[?&]lang=es(?:&|$)`), { timeout: 60000 })
+              await expect(iframe).toBeVisible({ timeout: 30000 })
+              const src = await iframe.getAttribute('src')
+              console.log(`[iframe:${item.editor}] ${src}`)
+              expect(src || '').toMatch(new RegExp(`${item.editor}/main/index(?:_loader)?\\.html.*[?&]lang=es(?:&|$)`))
 
-              const frame = page.frameLocator('iframe[name="frameEditor"]')
-              await expect(frame.getByText('Archivo', { exact: true }).first()).toBeVisible({ timeout: 60000 })
+              const handle = await iframe.elementHandle()
+              const frame = await handle?.contentFrame()
+              expect(frame).toBeTruthy()
+              if (!frame) return
+              await frame.waitForLoadState('domcontentloaded')
+
+              let bodyText = ''
+              for (let i = 0; i < 12; i++) {
+                await page.waitForTimeout(2500)
+                bodyText = await frame.locator('body').innerText().catch(() => '')
+                if (/Archivo|File|文件/.test(bodyText)) break
+              }
+
+              const htmlLang = await frame.locator('html').getAttribute('lang').catch(() => null)
+              const title = await frame.title().catch(() => '')
+              const visibleText = bodyText.replace(/\s+/g, ' ').slice(0, 12000)
+              const labeled = await frame.locator('[title], [aria-label]').evaluateAll((els) => els.slice(0, 80).map((el: Element) => ({
+                tag: el.tagName,
+                id: (el as HTMLElement).id,
+                title: el.getAttribute('title'),
+                aria: el.getAttribute('aria-label')
+              }))).catch(() => [])
+
+              console.log(`[state:${item.editor}] url=${frame.url()} htmlLang=${htmlLang} title=${title}`)
+              console.log(`[text:${item.editor}] ${visibleText}`)
+              console.log(`[labels:${item.editor}] ${JSON.stringify(labeled)}`)
+
+              expect(bodyText, `No apareció texto español en ${item.editor}`).toMatch(/Archivo|Inicio|Insertar/)
             })
           }
           TS
-          pnpm exec playwright test --project=chromium
+          pnpm exec playwright test --project=chromium --retries=0
           mv /tmp/original-vue.spec.ts e2e/vue.spec.ts
 
       - name: Confirmar que solo cambió idioma y recursos de locale
