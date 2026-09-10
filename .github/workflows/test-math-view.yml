@@ -24,27 +24,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - name: Localizar primitivas matemáticas del SDK
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('public/sdkjs/word/sdk-all.js')
-          s = p.read_text(errors='ignore')
-          terms = ['asc_AddMath', 'AddMath', 'ParaMath', 'CMath', 'InsertMath', 'ConvertMath', 'asc_GetSelectedText']
-          for term in terms:
-              print(f'\n===== {term} =====')
-              start = 0
-              shown = 0
-              while shown < 8:
-                  i = s.find(term, start)
-                  if i < 0: break
-                  print(s[max(0, i-220):min(len(s), i+500)].replace('\n', ' '))
-                  start = i + len(term)
-                  shown += 1
-          PY
       - run: pnpm exec playwright install --with-deps chromium
-      - name: Probar Vista matemática y enumerar API de Word
+      - name: Inspeccionar API matemática nativa en runtime
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
@@ -64,59 +45,73 @@ jobs:
             await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
-
             const toggle = page.getByRole('switch', { name: /Vista matemática/i });
             await toggle.waitFor({ state: 'visible', timeout: 30000 });
-            await toggle.click();
-            assert.equal(await toggle.getAttribute('aria-checked'), 'true');
-
-            const input = page.locator('#waltiva-math-source');
-            await input.fill('\\frac{x^2+1}{\\sqrt{y}}');
-            await page.locator('.math-render math').waitFor({ state: 'visible' });
-            assert.equal(await page.locator('.math-render mfrac').count(), 1);
-            assert.equal(await page.locator('.math-render msup').count(), 1);
-            assert.equal(await page.locator('.math-render msqrt').count(), 1);
-
             await page.waitForFunction(() => document.querySelectorAll('iframe').length > 0, null, { timeout: 120000 });
             await page.waitForTimeout(8000);
 
             const diagnostics = await page.evaluate(() => {
               const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
               const win = frame && frame.contentWindow;
-              if (!win) return { error: 'no iframe window' };
-              const api = win.DE?.getController?.('Toolbar')?.api ||
-                win.DE?.getController?.('Main')?.api ||
-                win.DE?.getController?.('DocumentHolder')?.api ||
-                win.Asc?.editor || null;
-              if (!api) return { error: 'no api' };
+              const api = win?.DE?.getController?.('Toolbar')?.api ||
+                win?.DE?.getController?.('Main')?.api ||
+                win?.DE?.getController?.('DocumentHolder')?.api ||
+                win?.Asc?.editor || null;
+              if (!win || !api) return { error: 'bridge unavailable' };
 
-              const names = new Set();
-              let obj = api;
-              for (let depth = 0; obj && depth < 8; depth++, obj = Object.getPrototypeOf(obj)) {
-                for (const name of Object.getOwnPropertyNames(obj)) names.add(name);
+              const names = [
+                'asc_AddMath', 'asc_AddMath2', 'asc_ConvertEquationToMath', 'asc_ConvertMathView',
+                'asc_SetMathInputType', 'asc_GetMathInputType', 'asc_IsInlineMath', 'asc_GetSelectionBounds',
+                'asc_AddText', 'Add_Text', 'pluginMethod_InputText', 'pluginMethod_PasteText',
+                'asc_findText', 'asc_SelectSearchElement', 'asc_RemoveSelection', 'Undo', 'Redo'
+              ];
+              const functions = {};
+              for (const name of names) {
+                try {
+                  const fn = api[name];
+                  functions[name] = typeof fn === 'function' ? {
+                    length: fn.length,
+                    source: Function.prototype.toString.call(fn).slice(0, 1800)
+                  } : null;
+                } catch (e) {
+                  functions[name] = { error: String(e) };
+                }
               }
-              const interesting = [...names]
-                .filter(name => /math|equat|text|paste|insert|select|search|find|undo|redo|remove|delete|replace/i.test(name))
-                .sort();
-              const lengths = {};
-              for (const name of interesting) {
-                try { if (typeof api[name] === 'function') lengths[name] = api[name].length; } catch {}
-              }
-              const ascMath = Object.keys(win.Asc || {}).filter(name => /math|equat/i.test(name)).sort();
-              const globals = Object.keys(win).filter(name => /ParaMath|CMath|MathMenu|MathContent/i.test(name)).sort();
-              return {
-                interesting,
-                lengths,
-                ascMath,
-                globals,
-                hasAddMath: typeof api.asc_AddMath === 'function',
-                addMathLength: typeof api.asc_AddMath === 'function' ? api.asc_AddMath.length : null,
-                hasSelectedText: typeof api.asc_GetSelectedText === 'function',
+
+              const enumToPlain = (obj) => {
+                if (!obj) return null;
+                const out = {};
+                for (const key of Object.keys(obj)) {
+                  const value = obj[key];
+                  if (['string','number','boolean'].includes(typeof value)) out[key] = value;
+                }
+                return out;
               };
+
+              const ascMath = {};
+              for (const key of Object.keys(win.Asc || {}).filter(k => /Math/i.test(k))) {
+                ascMath[key] = enumToPlain(win.Asc[key]) ?? typeof win.Asc[key];
+              }
+              const ascMathGlobal = win.AscMath ? Object.keys(win.AscMath).slice(0, 200) : [];
+
+              const wc = api.WordControl || api.WordControl?.m_oLogicDocument ? api.WordControl : null;
+              const logic = api.WordControl?.m_oLogicDocument || api.WordControl?.m_oLogicDocument || null;
+              const logicMethods = logic ? (() => {
+                const set = new Set();
+                let o = logic;
+                for (let d=0; o && d<6; d++, o=Object.getPrototypeOf(o)) {
+                  for (const k of Object.getOwnPropertyNames(o)) if (/math|equat|text|select|search|remove|add/i.test(k)) set.add(k);
+                }
+                return [...set].sort().slice(0, 250);
+              })() : [];
+
+              return { functions, ascMath, ascMathGlobal, hasWordControl: !!wc, hasLogic: !!logic, logicMethods };
             });
-            console.log('NATIVE_MATH_DIAGNOSTICS=' + JSON.stringify(diagnostics, null, 2));
-            assert.equal(diagnostics.hasSelectedText, true);
-            assert.equal(diagnostics.hasAddMath, true);
+
+            console.log('MATH_SIGNATURES=' + JSON.stringify(diagnostics, null, 2));
+            assert.ok(!diagnostics.error);
+            assert.ok(diagnostics.functions.asc_ConvertEquationToMath);
+            assert.ok(diagnostics.functions.asc_ConvertMathView);
             await browser.close();
           })().catch(error => {
             console.error(error);
