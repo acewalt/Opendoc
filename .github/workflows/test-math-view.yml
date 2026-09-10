@@ -1,0 +1,92 @@
+name: Validar Vista matemática
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-math-view.yml'
+      - 'src/components/DocumentHandler.vue'
+      - 'src/utils/mathView.ts'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Probar Vista matemática en Word
+        shell: bash
+        run: |
+          pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID || true' EXIT
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && break
+            sleep 1
+          done
+          node <<'NODE'
+          const { chromium } = require('@playwright/test');
+          const assert = require('node:assert/strict');
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+            const pageErrors = [];
+            page.on('pageerror', error => pageErrors.push(error.message));
+
+            await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
+            await page.getByText('Crear documento', { exact: true }).click();
+            await page.getByText('Documento', { exact: true }).click();
+            await page.locator('#iframe iframe').waitFor({ state: 'attached', timeout: 30000 });
+            await page.getByRole('switch', { name: /Vista matemática/i }).waitFor({ state: 'visible', timeout: 30000 });
+
+            await page.getByRole('switch', { name: /Vista matemática/i }).click();
+            assert.equal(await page.getByRole('switch', { name: /Vista matemática/i }).getAttribute('aria-checked'), 'true');
+
+            const input = page.locator('#waltiva-math-source');
+            await input.fill('\\frac{x^2+1}{\\sqrt{y}}');
+            await page.locator('.math-render math').waitFor({ state: 'visible' });
+            assert.equal(await page.locator('.math-render mfrac').count(), 1, 'Debe renderizar una fracción');
+            assert.equal(await page.locator('.math-render msup').count(), 1, 'Debe renderizar un superíndice');
+            assert.equal(await page.locator('.math-render msqrt').count(), 1, 'Debe renderizar una raíz');
+
+            const bridge = await page.evaluate(() => {
+              const frame = document.querySelector('#iframe iframe');
+              const win = frame && frame.contentWindow;
+              if (!win) return { hasWindow: false, hasDE: false, hasApi: false, hasSelectedText: false };
+              const api = win.DE?.getController?.('Toolbar')?.api ||
+                win.DE?.getController?.('Main')?.api ||
+                win.DE?.getController?.('DocumentHolder')?.api ||
+                win.Asc?.editor || null;
+              return {
+                hasWindow: true,
+                hasDE: !!win.DE,
+                hasApi: !!api,
+                hasSelectedText: typeof api?.asc_GetSelectedText === 'function' || typeof api?.GetSelectedText === 'function' || typeof api?.getSelectedText === 'function',
+              };
+            });
+            console.log('ONLYOFFICE bridge:', bridge);
+            assert.equal(bridge.hasWindow, true, 'El iframe debe ser same-origin');
+            assert.equal(bridge.hasApi, true, 'Debe poder resolverse la API interna de Word');
+            assert.equal(bridge.hasSelectedText, true, 'Debe existir una API para leer la selección');
+
+            const fatal = pageErrors.filter(message => !/Cannot read properties of undefined \(reading '0'\)/.test(message));
+            if (fatal.length) console.log('Page errors observados:', fatal);
+
+            await browser.close();
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
