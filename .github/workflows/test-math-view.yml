@@ -133,6 +133,12 @@ jobs:
                 const viewport = doc.querySelector('#viewport');
                 const topRect = topbar?.getBoundingClientRect();
                 const formatRect = formatbar?.getBoundingClientRect();
+                const diagnostic = [...doc.querySelectorAll('[id],canvas')].filter(el => /ruler|scroll|viewer|editor_sdk|canvas/i.test((el.id || '') + ' ' + (el.className || ''))).map(el => {
+                  const r = el.getBoundingClientRect();
+                  const s = getComputedStyle(el);
+                  return {tag:el.tagName,id:el.id,cls:String(el.className || '').slice(0,120),x:r.x,y:r.y,w:r.width,h:r.height,display:s.display,visibility:s.visibility,overflow:s.overflow};
+                }).slice(0,80);
+                console.log('MOBILE_EDITOR_DIAGNOSTIC=' + JSON.stringify(diagnostic, null, 2));
                 return {
                   loading: text.includes('Cargando documento'),
                   hasCanvas: !!doc.querySelector('canvas'),
