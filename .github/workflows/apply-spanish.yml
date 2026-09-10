@@ -1,4 +1,4 @@
-name: Aplicar localización española compatible con ONLYOFFICE 7.4.1
+name: Diagnosticar selector de locale compilado
 
 on:
   push:
@@ -6,247 +6,60 @@ on:
       - '.github/workflows/apply-spanish.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  localize-and-verify:
+  inspect-locale-loader:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar pnpm 10
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-          run_install: false
-
-      - name: Añadir locale español compatible sin alterar el motor
+      - name: Mostrar referencias exactas a locales en los bundles originales
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import gzip
-          import json
-          import urllib.request
-
-          WEBAPPS_COMMIT = '1e0cc82ea07fbc3d584c5644ec13873a1600be7e'
-          BASE = f'https://raw.githubusercontent.com/ONLYOFFICE/web-apps/{WEBAPPS_COMMIT}/apps'
-          editors = ('documenteditor', 'spreadsheeteditor', 'presentationeditor')
-
-          def download(path: str) -> bytes:
-              req = urllib.request.Request(path, headers={'User-Agent': 'Waltiva-localization'})
-              with urllib.request.urlopen(req, timeout=90) as response:
-                  return response.read()
-
-          def write_gzip(path: Path, raw: bytes) -> None:
-              path.write_bytes(gzip.compress(raw, compresslevel=9, mtime=0))
-
-          for editor in editors:
-              bundle = Path(f'public/web-apps/apps/{editor}/main/app.js')
-              text = bundle.read_text(encoding='utf-8')
-              zh_module = f'{editor}/main/locale/zh.json'
-              es_module = f'{editor}/main/locale/es.json'
-              zh_marker = f'define("{zh_module}",'
-              es_marker = f'define("{es_module}",'
-              if zh_marker not in text:
-                  raise RuntimeError(f'No se encontró el locale original {zh_module} en {bundle}')
-
-              raw_es = download(f'{BASE}/{editor}/main/locale/es.json')
-              es_locale = json.loads(raw_es.decode('utf-8-sig'))
-              if not isinstance(es_locale, dict) or len(es_locale) < 100:
-                  raise RuntimeError(f'Locale español inesperadamente pequeño para {editor}')
-
-              if es_marker not in text:
-                  payload = json.dumps(es_locale, ensure_ascii=False, separators=(',', ':'))
-                  insertion = f'define("{es_module}",{payload});'
-                  pos = text.index(zh_marker)
-                  text = text[:pos] + insertion + text[pos:]
-                  bundle.write_text(text, encoding='utf-8')
-                  write_gzip(bundle.with_suffix('.js.gz'), text.encode('utf-8'))
-              print(f'{editor}: locale es añadido con {len(es_locale)} claves; zh conservado')
-
-          formula_dir = Path('public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang')
-          for name in ('es.json', 'es_desc.json'):
-              raw = download(f'{BASE}/spreadsheeteditor/main/resources/formula-lang/{name}')
-              parsed = json.loads(raw.decode('utf-8-sig'))
-              if not isinstance(parsed, dict) or not parsed:
-                  raise RuntimeError(f'Recurso de fórmulas inválido: {name}')
-              target = formula_dir / name
-              target.write_bytes(raw)
-              write_gzip(formula_dir / f'{name}.gz', raw)
-              print(f'formula-lang/{name}: {len(parsed)} entradas')
-
-          api = Path('public/web-apps/apps/api/documents/api.js')
-          api_text = api.read_text(encoding='utf-8')
-          old = 'editorConfig:{lang:"en",canCoAuthoring'
-          new = 'editorConfig:{lang:"es",canCoAuthoring'
-          if old in api_text:
-              if api_text.count(old) != 1:
-                  raise RuntimeError('Se encontró más de un fallback de idioma en api.js')
-              api_text = api_text.replace(old, new, 1)
-              api.write_text(api_text, encoding='utf-8')
-          elif new not in api_text:
-              raise RuntimeError('No se encontró el fallback de editorConfig.lang en api.js')
-
-          home = Path('src/views/HomeView.vue')
-          home_text = home.read_text(encoding='utf-8').replace("text: 'Loading'", "text: 'Cargando...'", 1)
-          home.write_text(home_text, encoding='utf-8')
-
-          about = Path('src/views/AboutView.vue')
-          about_text = about.read_text(encoding='utf-8').replace('This is an about page', 'Acerca de Waltiva')
-          about.write_text(about_text, encoding='utf-8')
-
-          handler = Path('src/components/DocumentHandler.vue')
-          handler_text = handler.read_text(encoding='utf-8')
-          replacements = {
-              "console.log('app has loading')": "console.log('Editor cargado')",
-              "console.error('Error opening file:', error)": "console.error('Error al abrir el archivo:', error)",
-              "console.error('Failed to initialize editor:', error)": "console.error('Error al inicializar el editor:', error)",
-              "console.error('Failed to load OnlyOffice API:', error)": "console.error('No se pudo cargar la API de ONLYOFFICE:', error)",
-              "console.log('Save document event:', event)": "console.log('Evento de guardado del documento:', event)",
-              "console.log('Write file event:', event)": "console.log('Evento de escritura del archivo:', event)",
-              "console.warn('No data provided in writeFile event')": "console.warn('El evento de escritura no contiene datos')",
-              "throw new Error('Invalid image data: expected Uint8Array')": "throw new Error('Datos de imagen no válidos: se esperaba Uint8Array')",
-              "throw new Error('Invalid file name')": "throw new Error('Nombre de archivo no válido')",
-              "console.error('Error handling writeFile:', error)": "console.error('Error al procesar la escritura del archivo:', error)",
-          }
-          for source, target in replacements.items():
-              handler_text = handler_text.replace(source, target)
-          handler.write_text(handler_text, encoding='utf-8')
-
-          assert "lang: 'es'" in handler_text
-          assert 'editorConfig:{lang:"es",canCoAuthoring' in api_text
-          assert "text: 'Cargando...'" in home_text
-          assert 'Acerca de Waltiva' in about_text
-          for editor in editors:
-              text = Path(f'public/web-apps/apps/{editor}/main/app.js').read_text(encoding='utf-8')
-              assert text.count(f'define("{editor}/main/locale/es.json",') == 1
-              assert text.count(f'define("{editor}/main/locale/zh.json",') == 1
-          print('Localización compatible con ONLYOFFICE 7.4.1 preparada correctamente.')
-          PY
-
-      - name: Verificar sintaxis y configuración de idioma
-        run: |
-          node --check public/web-apps/apps/api/documents/api.js
-          node --check public/web-apps/apps/documenteditor/main/app.js
-          node --check public/web-apps/apps/spreadsheeteditor/main/app.js
-          node --check public/web-apps/apps/presentationeditor/main/app.js
           python3 - <<'PY'
           from pathlib import Path
           import re
-          candidates = [
-              Path('src/components/DocumentHandler.vue'),
-              Path('src/views/HomeView.vue'),
-              Path('src/views/AboutView.vue'),
-              Path('public/web-apps/apps/api/documents/api.js'),
-          ]
-          bad = re.compile(r'''(?:editorConfig\s*:\s*\{[^{}]{0,200}?lang\s*:\s*|\blang\s*[:=]\s*)["'](?:en|zh|zh-CN|zh_CN)["']''', re.I | re.S)
-          for path in candidates:
+
+          editors = ('documenteditor', 'spreadsheeteditor', 'presentationeditor')
+          for editor in editors:
+              path = Path(f'public/web-apps/apps/{editor}/main/app.js')
               text = path.read_text(encoding='utf-8')
-              match = bad.search(text)
-              if match:
-                  raise SystemExit(f'Configuración de idioma no española en {path}: {match.group(0)!r}')
-          print('No quedan inicializadores explícitos en en/zh en el wrapper ni DocsAPI.')
+              print(f'\n===== {editor} =====')
+
+              needles = [
+                  f'{editor}/main/locale/zh.json',
+                  f'{editor}/main/locale/es.json',
+                  'locale/zh.json',
+                  'locale/es.json',
+              ]
+              for needle in needles:
+                  positions = [m.start() for m in re.finditer(re.escape(needle), text)]
+                  print(f'{needle!r}: {len(positions)} ocurrencias')
+                  for n, pos in enumerate(positions[:20], 1):
+                      start = max(0, pos - 550)
+                      end = min(len(text), pos + len(needle) + 550)
+                      print(f'--- contexto {n} @ {pos} ---')
+                      print(text[start:end].replace('\n', '\\n'))
+
+              # Referencias de idioma potencialmente compiladas: solo contextos donde aparece zh
+              # cerca de términos lang/locale para evitar inundar el log con traducciones chinas.
+              seen = set()
+              for m in re.finditer(r'(?i)(?:lang|locale)', text):
+                  start = max(0, m.start() - 220)
+                  end = min(len(text), m.start() + 420)
+                  frag = text[start:end]
+                  if re.search(r'(?i)["\']zh(?:[-_]CN)?["\']', frag) and frag not in seen:
+                      seen.add(frag)
+                      print('--- posible hardcode lang/locale+zh ---')
+                      print(frag.replace('\n', '\\n'))
+                      if len(seen) >= 25:
+                          break
+
+              # Dependencias AMD que mencionen cualquier locale.
+              for m in re.finditer(r'define\([^\n]{0,2000}?locale/[^\n]{0,2000}?\)', text):
+                  frag = m.group(0)
+                  if len(frag) <= 4000:
+                      print('--- define con locale ---')
+                      print(frag[:4000])
           PY
-
-      - name: Instalar dependencias y compilar
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-
-      - name: Diagnosticar y validar los tres editores en Chromium
-        run: |
-          pnpm exec playwright install --with-deps chromium
-          cp e2e/vue.spec.ts /tmp/original-vue.spec.ts
-          cat > e2e/vue.spec.ts <<'TS'
-          import { test, expect } from '@playwright/test'
-
-          test.setTimeout(120000)
-          const cases = [
-            { label: 'Documento', editor: 'documenteditor' },
-            { label: 'Hoja de cálculo', editor: 'spreadsheeteditor' },
-            { label: 'Presentación', editor: 'presentationeditor' },
-          ]
-
-          for (const item of cases) {
-            test(`crea ${item.label} con interfaz española`, async ({ page }) => {
-              page.on('console', msg => console.log(`[browser:${item.editor}:${msg.type()}] ${msg.text()}`))
-              page.on('pageerror', err => console.log(`[pageerror:${item.editor}] ${err.message}`))
-              page.on('requestfailed', req => console.log(`[requestfailed:${item.editor}] ${req.url()} :: ${req.failure()?.errorText}`))
-              page.on('response', res => {
-                if (res.status() >= 400) console.log(`[http:${item.editor}] ${res.status()} ${res.url()}`)
-              })
-
-              await page.goto('/')
-              await page.getByRole('button', { name: 'Nuevo / Abrir archivo' }).click()
-              await page.getByText(item.label, { exact: true }).click()
-
-              const iframe = page.locator('iframe[name="frameEditor"]')
-              await expect(iframe).toBeVisible({ timeout: 30000 })
-              const src = await iframe.getAttribute('src')
-              console.log(`[iframe:${item.editor}] ${src}`)
-              expect(src || '').toMatch(new RegExp(`${item.editor}/main/index(?:_loader)?\\.html.*[?&]lang=es(?:&|$)`))
-
-              const handle = await iframe.elementHandle()
-              const frame = await handle?.contentFrame()
-              expect(frame).toBeTruthy()
-              if (!frame) return
-              await frame.waitForLoadState('domcontentloaded')
-
-              let bodyText = ''
-              for (let i = 0; i < 12; i++) {
-                await page.waitForTimeout(2500)
-                bodyText = await frame.locator('body').innerText().catch(() => '')
-                if (/Archivo|File|文件/.test(bodyText)) break
-              }
-
-              const htmlLang = await frame.locator('html').getAttribute('lang').catch(() => null)
-              const title = await frame.title().catch(() => '')
-              const visibleText = bodyText.replace(/\s+/g, ' ').slice(0, 12000)
-              const labeled = await frame.locator('[title], [aria-label]').evaluateAll((els) => els.slice(0, 80).map((el: Element) => ({
-                tag: el.tagName,
-                id: (el as HTMLElement).id,
-                title: el.getAttribute('title'),
-                aria: el.getAttribute('aria-label')
-              }))).catch(() => [])
-
-              console.log(`[state:${item.editor}] url=${frame.url()} htmlLang=${htmlLang} title=${title}`)
-              console.log(`[text:${item.editor}] ${visibleText}`)
-              console.log(`[labels:${item.editor}] ${JSON.stringify(labeled)}`)
-
-              expect(bodyText, `No apareció texto español en ${item.editor}`).toMatch(/Archivo|Inicio|Insertar/)
-            })
-          }
-          TS
-          pnpm exec playwright test --project=chromium --retries=0
-          mv /tmp/original-vue.spec.ts e2e/vue.spec.ts
-
-      - name: Confirmar que solo cambió idioma y recursos de locale
-        run: |
-          git status --short
-          git diff --check
-          git diff --stat
-          git diff -- src/views/HomeView.vue src/views/AboutView.vue src/components/DocumentHandler.vue public/web-apps/apps/api/documents/api.js
-
-      - name: Commit de la localización validada
-        run: |
-          git config user.name 'walt_to_art'
-          git config user.email 'guard.mauricio.save@gmail.com'
-          git add \
-            src/views/HomeView.vue \
-            src/views/AboutView.vue \
-            src/components/DocumentHandler.vue \
-            public/web-apps/apps/api/documents/api.js \
-            public/web-apps/apps/documenteditor/main/app.js \
-            public/web-apps/apps/documenteditor/main/app.js.gz \
-            public/web-apps/apps/spreadsheeteditor/main/app.js \
-            public/web-apps/apps/spreadsheeteditor/main/app.js.gz \
-            public/web-apps/apps/presentationeditor/main/app.js \
-            public/web-apps/apps/presentationeditor/main/app.js.gz \
-            public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang/es.json \
-            public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang/es.json.gz \
-            public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang/es_desc.json \
-            public/web-apps/apps/spreadsheeteditor/main/resources/formula-lang/es_desc.json.gz
-          git diff --cached --quiet && { echo 'No hay cambios nuevos que guardar'; exit 0; }
-          git commit -m 'Localizar ONLYOFFICE 7.4.1 al español'
-          git push origin main
