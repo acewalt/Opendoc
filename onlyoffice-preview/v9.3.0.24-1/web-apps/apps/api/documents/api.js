@@ -1308,7 +1308,7 @@ this.frame.blur())};window.AscEmbed.initWorker=function(a){window.AscEmbed.worke
     }
 
     function extendAppPath(config,  path) {
-        if ( !config.isLocalFile ) {
+        if ( !config.isLocalFile && path.indexOf('/v9.3.0.24-1/') < 0 ) {
             const ver = '/9.3.0-90621fd167d8090903a61c79b926eb27';
             if ( ver.lastIndexOf('{{') < 0 && path.indexOf(ver) < 0 ) {
                 const pos = path.indexOf('/web-apps/app');

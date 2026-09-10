@@ -3,5 +3,6 @@ Source branch: onlyoffice-engine
 Editor wrapper: wasm-onlyoffice-sdk 0.1.4
 ONLYOFFICE runtime: 9.3 scaffold from oonxt/wasm-onlyoffice-demo
 Local converter: x2t WebAssembly
+Internal editor paths patched for static/subpath hosting
 Original prototype reference: sweetwisdom/onlyoffice-web-local
 License: GNU AGPL-3.0-or-later
