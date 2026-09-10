@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 
+# Idempotent v2 patch: once loading.js contains the marker, later workflow runs are no-ops.
 path = Path('public/web-apps/apps/documenteditor/main/loading.js')
 s = path.read_text(encoding='utf-8')
 MARKER = 'Waltiva Mobile UX v2'
