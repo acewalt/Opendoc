@@ -15,6 +15,7 @@ const AURORA_DARK: WaltivaThemeId = 'aurora-dark'
 const AURORA_DARK_LABEL = 'Aurora Dark'
 const THEME_STYLESHEET_ID = 'waltiva-aurora-dark-styles'
 const CUSTOM_OPTION_ATTRIBUTE = 'data-waltiva-theme-option'
+const CUSTOM_ACTIVE_ATTRIBUTE = 'data-waltiva-theme-active'
 const EDITOR_FRAME_SELECTOR = 'iframe[name="frameEditor"], #iframe iframe'
 
 const BUILT_IN_THEME_LABELS = new Set([
@@ -134,12 +135,15 @@ function updateThemeMenuState(menu: Element, activeTheme: WaltivaThemeId | null)
 
   if (!customItem) return
 
+  const isActive = activeTheme === AURORA_DARK
   const customControl = getItemControl(customItem)
-  customItem.classList.toggle('checked', activeTheme === AURORA_DARK)
-  customControl.classList.toggle('checked', activeTheme === AURORA_DARK)
-  customControl.setAttribute('aria-checked', activeTheme === AURORA_DARK ? 'true' : 'false')
 
-  if (activeTheme !== AURORA_DARK) return
+  customItem.classList.toggle('checked', isActive)
+  customControl.classList.toggle('checked', isActive)
+  customItem.setAttribute(CUSTOM_ACTIVE_ATTRIBUTE, isActive ? 'true' : 'false')
+  customControl.setAttribute('aria-checked', isActive ? 'true' : 'false')
+
+  if (!isActive) return
 
   items.forEach((item) => {
     if (item === customItem) return
@@ -168,6 +172,7 @@ function ensureAuroraMenuOption(menu: HTMLElement, activeTheme: WaltivaThemeId |
     customItem = contrastItem.cloneNode(true) as HTMLElement
     stripDuplicateIds(customItem)
     customItem.setAttribute(CUSTOM_OPTION_ATTRIBUTE, AURORA_DARK)
+    customItem.setAttribute(CUSTOM_ACTIVE_ATTRIBUTE, 'false')
     customItem.classList.remove('checked', 'active', 'selected')
 
     const customControl = getItemControl(customItem)
@@ -193,6 +198,12 @@ function closeDropdown(menu: Element): void {
 
   const visibleContainer = menu.closest('.over')
   visibleContainer?.classList.remove('over')
+}
+
+function stopOnlyOfficeThemeHandling(event: Event): void {
+  if (event.cancelable) event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation()
 }
 
 export function initWaltivaThemeSystem(): () => void {
@@ -247,26 +258,53 @@ export function initWaltivaThemeSystem(): () => void {
     const observer = new MutationObserver(scheduleMenuScan)
     observer.observe(doc.documentElement, { childList: true, subtree: true })
 
-    const onClick = (event: MouseEvent): void => {
+    const getAuroraContext = (
+      event: Event,
+    ): { item: HTMLElement; menu: HTMLElement } | null => {
       const target = event.target instanceof Element ? event.target : null
-      if (!target) return
+      if (!target) return null
 
-      const customItem = target.closest<HTMLElement>(
+      const item = target.closest<HTMLElement>(
         `[${CUSTOM_OPTION_ATTRIBUTE}="${AURORA_DARK}"]`,
       )
+      if (!item) return null
 
-      if (customItem) {
-        const menu = customItem.closest<HTMLElement>('.dropdown-menu')
-        if (!menu || !looksLikeThemeMenu(menu)) return
+      const menu = item.closest<HTMLElement>('.dropdown-menu')
+      if (!menu || !looksLikeThemeMenu(menu)) return null
 
-        event.preventDefault()
-        event.stopPropagation()
-        event.stopImmediatePropagation()
-        syncThemeEverywhere(AURORA_DARK)
-        updateThemeMenuState(menu, AURORA_DARK)
-        closeDropdown(menu)
-        return
-      }
+      return { item, menu }
+    }
+
+    const activateAurora = (event: Event, closeMenu: boolean): boolean => {
+      const context = getAuroraContext(event)
+      if (!context) return false
+
+      // ONLYOFFICE can handle menu interaction before `click` (pointer/mouse down).
+      // Intercept the gesture first so its native theme handler cannot consume the
+      // cloned menu option as if it were the source "Contrast dark" item.
+      stopOnlyOfficeThemeHandling(event)
+      syncThemeEverywhere(AURORA_DARK)
+      updateThemeMenuState(context.menu, AURORA_DARK)
+
+      if (closeMenu) closeDropdown(context.menu)
+      return true
+    }
+
+    const onPointerDown = (event: PointerEvent): void => {
+      // Apply immediately, before ONLYOFFICE's own mousedown/click delegation.
+      activateAurora(event, false)
+    }
+
+    const onMouseDown = (event: MouseEvent): void => {
+      // Fallback for environments where pointer events are not used by the editor.
+      activateAurora(event, false)
+    }
+
+    const onClick = (event: MouseEvent): void => {
+      if (activateAurora(event, true)) return
+
+      const target = event.target instanceof Element ? event.target : null
+      if (!target) return
 
       const item = target.closest<HTMLElement>('li')
       const menu = item?.closest<HTMLElement>('.dropdown-menu')
@@ -274,16 +312,20 @@ export function initWaltivaThemeSystem(): () => void {
 
       const label = normalizeLabel(item.textContent)
       if (BUILT_IN_THEME_LABELS.has(label)) {
-        // OnlyOffice keeps ownership of all built-in themes. Waltiva only removes its overlay.
+        // ONLYOFFICE keeps ownership of all built-in themes. Waltiva only removes its overlay.
         syncThemeEverywhere(null)
       }
     }
 
+    doc.addEventListener('pointerdown', onPointerDown, true)
+    doc.addEventListener('mousedown', onMouseDown, true)
     doc.addEventListener('click', onClick, true)
     scheduleMenuScan()
 
     return () => {
       observer.disconnect()
+      doc.removeEventListener('pointerdown', onPointerDown, true)
+      doc.removeEventListener('mousedown', onMouseDown, true)
       doc.removeEventListener('click', onClick, true)
       attachedDocuments.delete(doc)
     }
