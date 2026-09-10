@@ -1,4 +1,4 @@
-name: Diagnosticar selector de fuentes
+name: Corregir selector de fuentes
 
 on:
   push:
@@ -6,23 +6,152 @@ on:
       - '.github/workflows/diagnose-font-dropdown.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  fix-and-verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Mostrar fragmentos compilados de ComboBoxFonts
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Corregir sprite del selector de fuentes
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          for editor in ('documenteditor','spreadsheeteditor','presentationeditor'):
-              text=Path(f'public/web-apps/apps/{editor}/main/app.js').read_text(encoding='utf-8')
-              print('\n===', editor, '===')
-              for marker in ('fonts_thumbnail','createImageData','imgidx'):
-                  pos=text.find(marker)
-                  print('\nMARKER', marker, 'POS', pos)
-                  if pos >= 0:
-                      print(text[max(0,pos-700):pos+1200])
+          import gzip
+
+          editors = ('documenteditor', 'spreadsheeteditor', 'presentationeditor')
+          old = 'path:"../../../../sdkjs/common/Images/fonts_thumbnail"+(/^(zh|ja|ko)$/i.test(Common.Locale.getCurrentLanguage())?"_ea":"")+"@1.5x.png"'
+          new = 'path:"../../../../sdkjs/common/Images/fonts_thumbnail_ea@1.5x.png"'
+
+          sprite = Path('public/sdkjs/common/Images/fonts_thumbnail_ea@1.5x.png.bin')
+          if not sprite.exists() or sprite.stat().st_size < 1000:
+              raise SystemExit('No existe el sprite binario de fuentes incluido por se-office')
+
+          for editor in editors:
+              path = Path(f'public/web-apps/apps/{editor}/main/app.js')
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{editor}: patrón de sprite inesperado ({count})')
+              text = text.replace(old, new, 1)
+              raw = text.encode('utf-8')
+              path.write_bytes(raw)
+              path.with_suffix('.js.gz').write_bytes(gzip.compress(raw, compresslevel=9, mtime=0))
+              print(f'{editor}: selector apuntando al sprite empaquetado existente')
           PY
+
+          node --check public/web-apps/apps/documenteditor/main/app.js
+          node --check public/web-apps/apps/spreadsheeteditor/main/app.js
+          node --check public/web-apps/apps/presentationeditor/main/app.js
+          git diff --check
+
+      - name: Instalar dependencias y compilar
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Probar dropdown y selección en los tres editores
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          cp e2e/vue.spec.ts /tmp/vue.spec.ts
+          cat > e2e/vue.spec.ts <<'TS'
+          import { test, expect } from '@playwright/test'
+
+          test.setTimeout(90000)
+          const cases = [
+            { label: 'Documento', editor: 'documenteditor' },
+            { label: 'Hoja de cálculo', editor: 'spreadsheeteditor' },
+            { label: 'Presentación', editor: 'presentationeditor' },
+          ]
+
+          for (const item of cases) {
+            test(`${item.editor}: selector de fuentes abre y selecciona`, async ({ page }) => {
+              const pageErrors: string[] = []
+              const spriteResponses: string[] = []
+              page.on('pageerror', err => pageErrors.push(err.message))
+              page.on('response', res => {
+                if (res.url().includes('fonts_thumbnail')) {
+                  spriteResponses.push(`${res.status()} ${res.url()}`)
+                }
+              })
+
+              await page.goto('/')
+              await page.getByRole('button', { name: 'Nuevo / Abrir archivo' }).click()
+              await page.getByText(item.label, { exact: true }).click()
+
+              const frame = page.frameLocator('iframe[name="frameEditor"]')
+              await expect(frame.getByText('Inicio', { exact: true }).first()).toBeVisible({ timeout: 30000 })
+              await page.waitForTimeout(1500)
+
+              const combos = frame.locator('.combobox.fonts')
+              const count = await combos.count()
+              expect(count).toBeGreaterThan(0)
+
+              let comboIndex = -1
+              for (let i = 0; i < count; i++) {
+                if (await combos.nth(i).isVisible()) {
+                  comboIndex = i
+                  break
+                }
+              }
+              expect(comboIndex).toBeGreaterThanOrEqual(0)
+
+              const combo = combos.nth(comboIndex)
+              const input = combo.locator('input')
+              const oldValue = await input.inputValue()
+              const menu = combo.locator('ul.dropdown-menu')
+
+              await combo.locator('button.dropdown-toggle').click()
+              await expect(menu).toBeVisible({ timeout: 5000 })
+
+              const items = menu.locator('li:not(.divider)')
+              expect(await items.count()).toBeGreaterThan(20)
+
+              // Elegir una entrada distinta a la actual confirma que el evento de selección funciona.
+              let changed = false
+              for (const idx of [10, 20, 30]) {
+                if (idx >= await items.count()) continue
+                await items.nth(idx).locator('a').click()
+                await page.waitForTimeout(250)
+                if ((await input.inputValue()) !== oldValue) {
+                  changed = true
+                  break
+                }
+                if (!(await menu.isVisible())) {
+                  await combo.locator('button.dropdown-toggle').click()
+                  await expect(menu).toBeVisible({ timeout: 3000 })
+                }
+              }
+              expect(changed).toBeTruthy()
+
+              expect(spriteResponses.some(line => line.includes('200') && line.includes('fonts_thumbnail_ea@1.5x.png.bin'))).toBeTruthy()
+              expect(pageErrors.some(line => /createImageData|out of memory/i.test(line))).toBeFalsy()
+              console.log(`${item.editor}: ${oldValue} -> ${await input.inputValue()}`)
+              console.log(`sprites=${JSON.stringify(spriteResponses)}`)
+            })
+          }
+          TS
+
+          pnpm exec playwright test --project=chromium --retries=0
+          mv /tmp/vue.spec.ts e2e/vue.spec.ts
+
+      - name: Commit de la corrección validada
+        run: |
+          git config user.name 'walt_to_art'
+          git config user.email 'guard.mauricio.save@gmail.com'
+          git add \
+            public/web-apps/apps/documenteditor/main/app.js \
+            public/web-apps/apps/documenteditor/main/app.js.gz \
+            public/web-apps/apps/spreadsheeteditor/main/app.js \
+            public/web-apps/apps/spreadsheeteditor/main/app.js.gz \
+            public/web-apps/apps/presentationeditor/main/app.js \
+            public/web-apps/apps/presentationeditor/main/app.js.gz
+          git diff --cached --quiet && { echo 'No hay cambios que guardar'; exit 0; }
+          git commit -m 'Corregir selector de fuentes de ONLYOFFICE'
+          git push origin main
