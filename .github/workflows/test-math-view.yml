@@ -1,4 +1,4 @@
-name: Validar Vista matemática
+name: Diagnosticar ribbon y móvil
 
 on:
   push:
@@ -6,7 +6,6 @@ on:
     paths:
       - '.github/workflows/test-math-view.yml'
       - 'src/components/DocumentHandler.vue'
-      - 'src/utils/mathView.ts'
   workflow_dispatch:
 
 jobs:
@@ -24,8 +23,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: Probar inserción LaTeX como ecuación nativa
+      - run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Inspeccionar pestaña Diseño y carga tipo iPhone
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
@@ -36,88 +35,85 @@ jobs:
             sleep 1
           done
           node <<'NODE'
-          const { chromium } = require('@playwright/test');
-          const assert = require('node:assert/strict');
+          const { chromium, webkit, devices } = require('@playwright/test');
 
-          (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+          async function openDocument(page) {
             await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
-            await page.getByRole('switch', { name: /Vista matemática/i }).waitFor({ state: 'visible', timeout: 30000 });
             await page.waitForFunction(() => document.querySelectorAll('iframe').length > 0, null, { timeout: 120000 });
-            await page.waitForTimeout(8000);
+          }
 
-            const result = await page.evaluate(async () => {
-              const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
-              const win = frame && frame.contentWindow;
-              const api = win?.DE?.getController?.('Toolbar')?.api || win?.Asc?.editor || null;
-              if (!win || !api) return { error: 'bridge unavailable' };
+          (async () => {
+            {
+              const browser = await chromium.launch({ headless: true });
+              const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+              await openDocument(page);
+              await page.waitForTimeout(8000);
+              const ribbon = await page.evaluate(() => {
+                const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
+                const doc = frame?.contentDocument;
+                if (!doc) return { error: 'no iframe document' };
+                const clean = (el) => ({
+                  tag: el.tagName,
+                  id: el.id || '',
+                  cls: typeof el.className === 'string' ? el.className : '',
+                  role: el.getAttribute('role'),
+                  dataValue: el.getAttribute('data-value'),
+                  text: (el.textContent || '').trim().slice(0, 120),
+                });
+                const exact = [...doc.querySelectorAll('*')].filter(el => (el.textContent || '').trim() === 'Diseño');
+                return {
+                  frameUrl: frame?.src,
+                  matches: exact.slice(0, 10).map(el => ({
+                    self: clean(el),
+                    parent: el.parentElement ? clean(el.parentElement) : null,
+                    grand: el.parentElement?.parentElement ? clean(el.parentElement.parentElement) : null,
+                    great: el.parentElement?.parentElement?.parentElement ? clean(el.parentElement.parentElement.parentElement) : null,
+                  })),
+                };
+              });
+              console.log('DESIGN_RIBBON=' + JSON.stringify(ribbon, null, 2));
+              await browser.close();
+            }
 
-              const fnSource = {};
-              for (const name of ['asc_AddMath','asc_AddMath2','asc_AddText','Add_Text','pluginMethod_InputText','pluginMethod_PasteText']) {
-                try {
-                  fnSource[name] = typeof api[name] === 'function' ? Function.prototype.toString.call(api[name]).slice(0, 3000) : null;
-                } catch (e) { fnSource[name] = String(e); }
-              }
-
-              const describeSelection = () => {
-                const out = [];
-                try {
-                  const selected = api.getSelectedElements?.() || [];
-                  for (const item of selected) {
-                    out.push({ type: item.get_ObjectType?.(), ctor: item.get_ObjectValue?.()?.constructor?.name || null });
+            {
+              const browser = await webkit.launch({ headless: true });
+              const context = await browser.newContext({ ...devices['iPhone 13'] });
+              const page = await context.newPage();
+              const consoleErrors = [];
+              const pageErrors = [];
+              page.on('console', msg => {
+                if (msg.type() === 'error' || msg.type() === 'warning') consoleErrors.push(msg.type() + ': ' + msg.text());
+              });
+              page.on('pageerror', err => pageErrors.push(String(err)));
+              await openDocument(page);
+              await page.waitForTimeout(30000);
+              const mobile = await page.evaluate(() => {
+                const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
+                const win = frame?.contentWindow;
+                const doc = frame?.contentDocument;
+                const api = win?.DE?.getController?.('Toolbar')?.api || win?.DE?.getController?.('Main')?.api || win?.Asc?.editor || null;
+                const bodyText = (doc?.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 1000);
+                const apiFlags = {};
+                if (api) {
+                  for (const key of ['isDocumentLoadComplete','isDocumentLoaded','DocumentLoadComplete','bInit_word_control','isLoadFullApi']) {
+                    try { apiFlags[key] = typeof api[key] === 'function' ? api[key]() : api[key]; } catch (e) { apiFlags[key] = String(e); }
                   }
-                } catch (e) { out.push({ error: String(e) }); }
-                return out;
-              };
-
-              const attempts = [];
-              const latex = '\\frac{x^2+1}{\\sqrt{y}}';
-              const oldType = api.asc_GetMathInputType?.();
-              api.asc_SetMathInputType?.(win.Asc.c_oAscMathInputType.LaTeX);
-
-              const runAttempt = async (label, action) => {
-                try {
-                  api.asc_EditSelectAll?.();
-                  if ((api.asc_GetSelectedText?.() || '').length) api.asc_Remove?.(-1, true, false, false, false);
-                  api.asc_RemoveSelection?.();
-                  await new Promise(r => setTimeout(r, 250));
-                  const before = describeSelection();
-                  const value = action();
-                  await new Promise(r => setTimeout(r, 700));
-                  const afterInsert = describeSelection();
-                  let convertResult = null;
-                  let convertError = null;
-                  try { convertResult = api.asc_ConvertMathView?.(false, false); } catch (e) { convertError = String(e); }
-                  await new Promise(r => setTimeout(r, 400));
-                  const afterConvert = describeSelection();
-                  const selectedText = api.asc_GetSelectedText?.();
-                  attempts.push({ label, valueType: typeof value, before, afterInsert, afterConvert, selectedText, convertResult, convertError, inline: api.asc_IsInlineMath?.() });
-                } catch (e) {
-                  attempts.push({ label, error: String(e), stack: e?.stack });
-                } finally {
-                  try { api.Undo?.(); api.Undo?.(); api.Undo?.(); api.asc_RemoveSelection?.(); } catch {}
-                  await new Promise(r => setTimeout(r, 300));
                 }
-              };
-
-              await runAttempt('AddMath2-string', () => api.asc_AddMath2?.(latex));
-              await runAttempt('AddMath-undefined-then-text', () => { api.asc_AddMath?.(); return api.asc_AddText?.(latex); });
-              await runAttempt('AddMath2-undefined-then-text', () => { api.asc_AddMath2?.(); return api.asc_AddText?.(latex); });
-              await runAttempt('AddMath-fraction-template-then-text', () => { api.asc_AddMath?.(16777216); return api.asc_AddText?.(latex); });
-
-              api.asc_SetMathInputType?.(oldType);
-              return { fnSource, attempts, mathType: win.Asc.c_oAscTypeSelectElement?.Math };
-            });
-
-            console.log('NATIVE_INSERT_RESULT=' + JSON.stringify(result, null, 2));
-            assert.ok(!result.error);
-            const successful = result.attempts.find(a => !a.error && [...(a.afterInsert || []), ...(a.afterConvert || [])].some(x => x.type === result.mathType));
-            assert.ok(successful, 'Ningún intento creó un objeto Math nativo');
-            console.log('SUCCESSFUL_NATIVE_PATH=' + successful.label);
-            await browser.close();
+                return {
+                  frameUrl: frame?.src || '',
+                  bodyText,
+                  hasLoadingText: bodyText.includes('Cargando documento'),
+                  hasApi: !!api,
+                  apiFlags,
+                  innerWidth: win?.innerWidth,
+                  userAgent: win?.navigator?.userAgent,
+                };
+              });
+              console.log('IPHONE_WEBKIT=' + JSON.stringify({ mobile, consoleErrors, pageErrors }, null, 2));
+              await browser.close();
+            }
           })().catch(error => {
             console.error(error);
             process.exit(1);
