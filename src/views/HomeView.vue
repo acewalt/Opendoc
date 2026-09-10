@@ -1,6 +1,6 @@
 <template>
   <div class="home" :class="{ embedded: isEmbedded }">
-    <div class="top-operation-bar" v-if="!isEmbedded && !docmentObj?.fileName">
+    <div class="top-operation-bar" v-if="!isEmbedded && !fromWaltiva && !docmentObj?.fileName">
       <el-button type="primary" @click="showCreateDialog = true">Nuevo / Abrir archivo</el-button>
     </div>
 
@@ -12,18 +12,33 @@
         ref="documentHandler"
       />
 
-      <div class="main-content" v-else-if="!isEmbedded">
+      <div class="main-content" v-else-if="!isEmbedded && !fromWaltiva">
         <h1>Bienvenido a Waltiva</h1>
         <p>Crea un documento nuevo o abre un archivo local para empezar.</p>
       </div>
 
       <div class="embed-wait" v-else>
-        Preparando editor…
+        <template v-if="launchError">
+          <strong>No se pudo abrir el documento</strong>
+          <span>{{ launchError }}</span>
+          <button type="button" class="return-link" @click="backToWaltiva">Volver a Waltiva</button>
+        </template>
+        <template v-else>Preparando editor…</template>
       </div>
     </div>
 
+    <button
+      v-if="fromWaltiva && docmentObj?.fileName"
+      type="button"
+      class="waltiva-back"
+      title="Volver al espacio de trabajo"
+      @click="backToWaltiva"
+    >
+      ← Waltiva
+    </button>
+
     <el-dialog
-      v-if="!isEmbedded"
+      v-if="!isEmbedded && !fromWaltiva"
       v-model="showCreateDialog"
       title="Nuevo / Abrir archivo"
       width="450px"
@@ -68,8 +83,14 @@ const showCreateDialog = ref(false)
 const documentHandler = ref<InstanceType<typeof DocumentHandler> | null>(null)
 const docmentObj = ref<DocmentType | null>(null)
 const isEmbedded = ref(false)
+const fromWaltiva = ref(false)
+const launchError = ref('')
 
 const ACCEPTED_FILES = '.docx,.xlsx,.pptx,.doc,.xls,.ppt,.odt,.ods,.odp,.pdf,.txt,.rtf,.csv'
+const DB_NAME = 'waltiva-local-files'
+const DB_VERSION = 2
+const RECENT_STORE = 'recent'
+const LAUNCH_STORE = 'launch'
 
 function queryValue(name: string): string | null {
   const direct = new URLSearchParams(window.location.search).get(name)
@@ -83,6 +104,24 @@ function queryValue(name: string): string | null {
   return null
 }
 
+function openBridgeDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(RECENT_STORE)) {
+        const store = db.createObjectStore(RECENT_STORE, { keyPath: 'id' })
+        store.createIndex('lastOpened', 'lastOpened')
+      }
+      if (!db.objectStoreNames.contains(LAUNCH_STORE)) {
+        db.createObjectStore(LAUNCH_STORE, { keyPath: 'id' })
+      }
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
 const onCreateNew = (ext: string) => {
   const names: Record<string, string> = {
     '.docx': 'Nuevo documento.docx',
@@ -94,6 +133,7 @@ const onCreateNew = (ext: string) => {
     fileName: names[ext] || `Nuevo archivo${ext}`,
     file: null,
   }
+  launchError.value = ''
   showCreateDialog.value = false
 }
 
@@ -102,7 +142,36 @@ function openLocalFile(file: File) {
     fileName: file.name,
     file,
   }
+  launchError.value = ''
   showCreateDialog.value = false
+}
+
+async function openLaunchFile(id: string) {
+  const db = await openBridgeDb()
+  try {
+    const record = await new Promise<any>((resolve, reject) => {
+      const req = db.transaction(LAUNCH_STORE, 'readonly').objectStore(LAUNCH_STORE).get(id)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+
+    if (!record?.blob) throw new Error('No se encontró la copia temporal del archivo.')
+
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(LAUNCH_STORE, 'readwrite')
+      tx.objectStore(LAUNCH_STORE).delete(id)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+
+    const file = new File([record.blob], record.name, {
+      type: record.type || record.blob.type || '',
+      lastModified: record.lastModified || Date.now(),
+    })
+    openLocalFile(file)
+  } finally {
+    db.close()
+  }
 }
 
 const onOpenDocument = async () => {
@@ -116,6 +185,10 @@ const onOpenDocument = async () => {
   }
 
   input.click()
+}
+
+function backToWaltiva() {
+  window.location.href = '../?v=launcher3'
 }
 
 function handleParentMessage(event: MessageEvent) {
@@ -170,7 +243,6 @@ async function initFileUrl() {
     }
 
     if (!fileName) throw new Error('No fue posible determinar el nombre del archivo.')
-
     openLocalFile(new File([blob], fileName, { type: blob.type }))
   } catch (err) {
     console.error('Error al cargar el archivo:', err)
@@ -179,23 +251,35 @@ async function initFileUrl() {
         { type: 'waltiva-editor-error', message: err instanceof Error ? err.message : String(err) },
         window.location.origin,
       )
+    } else {
+      launchError.value = err instanceof Error ? err.message : String(err)
     }
   } finally {
     loadingInstance.close()
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   isEmbedded.value = queryValue('embed') === '1'
+  fromWaltiva.value = queryValue('fromWaltiva') === '1'
 
   window.addEventListener('message', handleParentMessage)
 
+  const openId = queryValue('openId')
   const requestedType = (queryValue('type') || '').toLowerCase()
-  if (requestedType === 'docx' || requestedType === 'xlsx' || requestedType === 'pptx') {
-    onCreateNew(`.${requestedType}`)
-  }
 
-  void initFileUrl()
+  if (openId) {
+    try {
+      await openLaunchFile(openId)
+    } catch (err) {
+      console.error('Error al recuperar el archivo desde Waltiva:', err)
+      launchError.value = err instanceof Error ? err.message : String(err)
+    }
+  } else if (requestedType === 'docx' || requestedType === 'xlsx' || requestedType === 'pptx') {
+    onCreateNew(`.${requestedType}`)
+  } else {
+    await initFileUrl()
+  }
 
   if (isEmbedded.value && window.parent !== window) {
     window.parent.postMessage({ type: 'waltiva-editor-ready' }, window.location.origin)
@@ -234,17 +318,14 @@ onBeforeUnmount(() => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 10px;
   text-align: center;
 }
 
-.main-content h1 {
-  margin-bottom: 20px;
-}
-
-.embed-wait {
-  color: #737373;
-  font-size: 14px;
-}
+.main-content h1 { margin-bottom: 20px; }
+.embed-wait { color: #737373; font-size: 14px; }
+.return-link { border: 0; background: #2f64a3; color: white; border-radius: 6px; padding: 8px 13px; cursor: pointer; }
+.waltiva-back { position: fixed; left: 12px; bottom: 12px; z-index: 99999; border: 1px solid rgba(0,0,0,.14); background: rgba(255,255,255,.92); color: #333; border-radius: 7px; padding: 7px 10px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.12); cursor: pointer; }
 
 #panel-createnew {
   background-color: white;
