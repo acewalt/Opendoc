@@ -1,0 +1,1 @@
+import{_ as t,c as o,a,o as s}from"./index-64M9LTVN.js";const c={},r={class:"about"};function n(_,e){return s(),o("div",r,e[0]||(e[0]=[a("h1",null,"Acerca de Waltiva",-1)]))}const d=t(c,[["render",n]]);export{d as default};
