@@ -30,5 +30,6 @@ jobs:
             echo "No hay cambios que guardar"
             exit 0
           fi
-          git commit -m "Apply mobile UX v4 fixes"
+          git commit -m "Apply mobile UX v4.1 fixes"
+          git pull --rebase origin main
           git push
