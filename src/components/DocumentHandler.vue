@@ -1,318 +1,127 @@
 <template>
-    <div class="editor-container" v-loaing="loading" element-loading-text="Cargando…">
-        <div id="iframe"></div>
+  <div class="editor-container">
+    <OnlyOfficeEditor
+      :key="editorKey"
+      :assets-path="assetsPath"
+      :x2t-path="x2tPath"
+      language="es-ES"
+      theme="theme-light"
+      :user="{ id: 'waltiva-local', name: 'Usuario' }"
+      v-bind="editorSource"
+      @ready="handleReady"
+      @document-state-change="handleStateChange"
+      @save="handleSave"
+      @error="handleError"
+      class="office-editor"
+    />
+
+    <div v-if="errorMessage" class="editor-error">
+      <strong>No se pudo iniciar el editor.</strong>
+      <span>{{ errorMessage }}</span>
     </div>
+  </div>
 </template>
 
 <script lang="ts" setup>
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { getDocumentType, DocmentType } from '@/utils/util'
-import { g_sEmpty_bin } from '@/utils/empty_bin'
-// @ts-ignore
-import {
-    initX2TScript,
-    initX2T,
-    convertDocument,
-    convertBinToDocumentAndDownload,
-    c_oAscFileType2,
-} from '@/utils/x2t'
+import { computed, ref, watch } from 'vue'
+import { OnlyOfficeEditor } from 'wasm-onlyoffice-sdk/vue'
+import type { DocmentType } from '@/utils/util'
 
 const props = defineProps<{
-    file: DocmentType
+  file: DocmentType
 }>()
 
-const editor = ref<any>(null)
-const loading = ref(false)
-const media: { [key: string]: string } = {}
+const editorKey = ref(0)
+const errorMessage = ref('')
 
-onMounted(async () => {
-    loading.value = true
-    try {
-        await initX2TScript()
-        await loadEditorApi()
-        await initX2T()
-        loading.value = false
-
-        const stopWatch = watch(
-            () => props.file.fileName,
-            async () => {
-                try {
-                    await openFile()
-                } catch (error) {
-                    console.error('Error al abrir el archivo:', error)
-                    alert('No se pudo abrir el archivo. Comprueba que el formato sea compatible.')
-                }
-            },
-            { immediate: true },
-        )
-
-        onBeforeUnmount(stopWatch)
-    } catch (error) {
-        console.error('No se pudo inicializar el editor:', error)
-    }
+const extension = computed(() => {
+  const name = props.file?.fileName || ''
+  return name.split('.').pop()?.toLowerCase() || 'docx'
 })
 
-async function handleDocumentOperation(options: { isNew: boolean; fileName: string; file?: File }) {
-    try {
-        const { isNew, fileName, file } = options
-        const fileType = fileName.split('.').pop() || ''
-        const docType = getDocumentType(fileType)
-        void docType
-
-        let documentData: {
-            bin: ArrayBuffer
-            media?: any
-        }
-
-        if (isNew) {
-            const emptyBin = g_sEmpty_bin[`.${fileType}`]
-            if (!emptyBin) {
-                throw new Error(`Formato de archivo no compatible: ${fileType}`)
-            }
-            documentData = { bin: emptyBin }
-        } else {
-            if (!file) throw new Error('El archivo no es válido.')
-            documentData = await convertDocument(file)
-        }
-
-        createEditorInstance({
-            fileName,
-            fileType,
-            binData: documentData.bin,
-            media: documentData.media,
-        })
-    } catch (error: any) {
-        console.error('Falló la operación del documento:', error)
-        alert(`No se pudo procesar el documento: ${error.message}`)
-        throw error
-    }
-}
-
-function createEditorInstance(config: {
-    fileName: string
-    fileType: string
-    binData: ArrayBuffer
-    media?: any
-}) {
-    if (editor.value) {
-        editor.value.destroyEditor()
-        editor.value = null
-    }
-
-    const { fileName, fileType, binData, media } = config
-
-    editor.value = new window.DocsAPI.DocEditor('iframe', {
-        document: {
-            title: fileName,
-            url: fileName,
-            fileType,
-            permissions: {
-                edit: true,
-                chat: false,
-                protect: false,
-            },
-        },
-        editorConfig: {
-            lang: 'es',
-            customization: {
-                help: false,
-                about: false,
-                hideRightMenu: true,
-                features: {
-                    spellcheck: {
-                        change: false,
-                    },
-                },
-                anonymous: {
-                    request: false,
-                    label: 'Invitado',
-                },
-            },
-        },
-        events: {
-            onAppReady: () => {
-                if (media) {
-                    editor.value.sendCommand({
-                        command: 'asc_setImageUrls',
-                        data: { urls: media },
-                    })
-                }
-
-                editor.value.sendCommand({
-                    command: 'asc_openDocument',
-                    data: { buf: binData },
-                })
-            },
-            onDocumentReady: () => {
-                console.log('Documento cargado:', fileName)
-            },
-            onSave: handleSaveDocument,
-            writeFile: handleWriteFile,
-        },
-    })
-}
-
-async function openFile() {
-    const { fileName, file } = props.file
-
-    await handleDocumentOperation({
-        isNew: !file,
-        fileName,
-        file,
-    })
-}
-
-onBeforeUnmount(() => {
-    if (editor.value && typeof editor.value.destroyEditor === 'function') {
-        editor.value.destroyEditor()
-    }
+const newDocumentType = computed<'docx' | 'xlsx' | 'pptx'>(() => {
+  if (extension.value === 'xlsx') return 'xlsx'
+  if (extension.value === 'pptx') return 'pptx'
+  return 'docx'
 })
 
-function loadEditorApi(): Promise<void> {
-    return new Promise((resolve, reject) => {
-        if (window.DocsAPI) {
-            resolve()
-            return
-        }
-
-        const script = document.createElement('script')
-        script.src = './web-apps/apps/api/documents/api.js'
-        script.onload = () => resolve()
-        script.onerror = (error) => {
-            console.error('No se pudo cargar la API de ONLYOFFICE:', error)
-            alert('No se pudo cargar el componente del editor de ONLYOFFICE.')
-            reject(error)
-        }
-        document.head.appendChild(script)
-    })
-}
-
-interface SaveEvent {
-    data: {
-        data: string
-        option: any
-    }
-}
-
-async function handleSaveDocument(event: SaveEvent) {
-    console.log('Evento de guardado:', event)
-
-    if (event.data && event.data.data) {
-        const { data, option } = event.data
-        await convertBinToDocumentAndDownload(
-            data.data,
-            props.file.fileName,
-            c_oAscFileType2[option.outputformat],
-        )
-    }
-
-    editor.value.sendCommand({
-        command: 'asc_onSaveCallback',
-        data: { err_code: 0 },
-    })
-}
-
-function handleWriteFile(event: any) {
-    try {
-        const { data: eventData } = event
-        if (!eventData) {
-            console.warn('No se recibieron datos para escribir el archivo.')
-            return
-        }
-
-        const {
-            data: imageData,
-            file: fileName,
-        } = eventData
-
-        if (!imageData || !(imageData instanceof Uint8Array)) {
-            throw new Error('Datos de imagen no válidos: se esperaba Uint8Array.')
-        }
-
-        if (!fileName || typeof fileName !== 'string') {
-            throw new Error('Nombre de archivo no válido.')
-        }
-
-        const fileExtension = fileName.split('.').pop()?.toLowerCase() || 'png'
-        const mimeType = getMimeTypeFromExtension(fileExtension)
-        const blob = new Blob([imageData], { type: mimeType })
-        const objectUrl = URL.createObjectURL(blob)
-
-        media[`media/${fileName}`] = objectUrl
-        editor.value.sendCommand({
-            command: 'asc_setImageUrls',
-            data: {
-                urls: media,
-            },
-        })
-
-        editor.value.sendCommand({
-            command: 'asc_writeFileCallback',
-            data: {
-                path: objectUrl,
-                imgName: fileName,
-            },
-        })
-    } catch (error: any) {
-        console.error('Error al procesar la imagen:', error)
-
-        if (editor.value && typeof editor.value.sendCommand === 'function') {
-            editor.value.sendCommand({
-                command: 'asc_writeFileCallback',
-                data: {
-                    success: false,
-                    error: error.message,
-                },
-            })
-        }
-
-        if (event.callback && typeof event.callback === 'function') {
-            event.callback({
-                success: false,
-                error: error.message,
-            })
-        }
-    }
-}
-
-function getMimeTypeFromExtension(extension: string): string {
-    const mimeMap: { [key: string]: string } = {
-        png: 'image/png',
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-        gif: 'image/gif',
-        bmp: 'image/bmp',
-        webp: 'image/webp',
-        svg: 'image/svg+xml',
-        ico: 'image/x-icon',
-        tiff: 'image/tiff',
-        tif: 'image/tiff',
-    }
-
-    return mimeMap[extension?.toLowerCase()] || 'image/png'
-}
-
-onBeforeUnmount(() => {
-    Object.values(media).forEach((url) => {
-        if (typeof url === 'string' && url.startsWith('blob:')) {
-            URL.revokeObjectURL(url)
-        }
-    })
-
-    if (editor.value && typeof editor.value.destroyEditor === 'function') {
-        editor.value.destroyEditor()
-    }
+const editorSource = computed(() => {
+  if (props.file?.file) return { file: props.file.file }
+  return { newDocument: newDocumentType.value }
 })
+
+// El scaffold 9.3 se sirve desde la misma ruta de la preview. Los JS/CSS pesados
+// del editor usan el CDN fijado por el scaffold, pero el documento nunca se sube.
+const previewRoot = new URL('./', document.baseURI).pathname.replace(/\/$/, '')
+const assetsPath = `${previewRoot}/v9.3.0.24-1`
+
+// Reutilizamos el conversor x2t WASM que ya está alojado dentro de Waltiva.
+const x2tPath = `${previewRoot}/wasm/x2t/`
+
+watch(
+  () => [props.file?.fileName, props.file?.file] as const,
+  () => {
+    errorMessage.value = ''
+    editorKey.value += 1
+  },
+)
+
+function handleReady() {
+  errorMessage.value = ''
+  console.info('[Waltiva] ONLYOFFICE 9.3 listo:', props.file.fileName)
+}
+
+function handleStateChange(isDirty: boolean) {
+  console.debug('[Waltiva] documento modificado:', isDirty)
+}
+
+function handleSave(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename || props.file.fileName
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function handleError(error: Error) {
+  console.error('[Waltiva] error del editor:', error)
+  errorMessage.value = error?.message || 'Error desconocido al cargar ONLYOFFICE.'
+}
 </script>
 
 <style scoped>
-.editor-container {
-    width: 100%;
-    height: 100vh;
+.editor-container,
+.office-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
 }
 
-#iframe {
-    width: 100%;
-    height: 100%;
+.editor-container {
+  position: relative;
+  overflow: hidden;
+  background: #f3f3f3;
+}
+
+.editor-error {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  z-index: 9999;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid #f0b8b8;
+  border-radius: 8px;
+  background: #fff5f5;
+  color: #8b1e1e;
+  font: 13px/1.4 system-ui, sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 </style>

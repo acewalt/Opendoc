@@ -20,7 +20,7 @@ jobs:
   preview:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout engine source
+      - name: Checkout Waltiva engine source
         uses: actions/checkout@v4
         with:
           ref: onlyoffice-engine
@@ -38,10 +38,29 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
-      - name: Build engine
+      - name: Build Waltiva
         run: pnpm build
+
+      - name: Install ONLYOFFICE 9.3 same-origin scaffold
+        run: |
+          rm -rf /tmp/oo-demo
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/oonxt/wasm-onlyoffice-demo.git /tmp/oo-demo
+          git -C /tmp/oo-demo sparse-checkout set public/v9.3.0.24-1
+
+          # Ya no publicamos el runtime chino antiguo de se-office.
+          rm -rf html/web-apps html/sdkjs html/fonts
+          rm -rf html/v9.3.0.24-1
+          cp -a /tmp/oo-demo/public/v9.3.0.24-1 html/v9.3.0.24-1
+
+          # x2t WASM sigue siendo local a Waltiva: html/wasm/x2t/.
+          test -f html/wasm/x2t/x2t.js
+          test -f html/wasm/x2t/x2t.wasm
+          test -f html/v9.3.0.24-1/web-apps/apps/api/documents/api.js
+          test -f html/v9.3.0.24-1/web-apps/apps/documenteditor/main/index.html
+          test -f html/v9.3.0.24-1/web-apps/apps/spreadsheeteditor/main/index.html
+          test -f html/v9.3.0.24-1/web-apps/apps/presentationeditor/main/index.html
 
       - name: Checkout current Pages branch
         uses: actions/checkout@v4
@@ -55,12 +74,15 @@ jobs:
           rm -rf current-site/onlyoffice-preview
           mkdir -p current-site/onlyoffice-preview
           cp -a html/. current-site/onlyoffice-preview/
+          touch current-site/onlyoffice-preview/.nojekyll
           cat > current-site/onlyoffice-preview/SOURCE.txt <<'TXT'
-          Waltiva ONLYOFFICE engine preview
+          Waltiva browser Office engine preview
           Source branch: onlyoffice-engine
-          Upstream: sweetwisdom/onlyoffice-web-local
-          Upstream commit: c4905016372a633cfba59a78f0acb3f029c85883
-          License: GNU AGPL-3.0
+          Editor wrapper: wasm-onlyoffice-sdk 0.1.4
+          ONLYOFFICE runtime: 9.3 scaffold from oonxt/wasm-onlyoffice-demo
+          Local converter: x2t WebAssembly
+          Original prototype reference: sweetwisdom/onlyoffice-web-local
+          License: GNU AGPL-3.0-or-later
           TXT
 
       - name: Commit preview to main
@@ -68,6 +90,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add onlyoffice-preview
-          git commit -m 'Publicar vista previa de Waltiva en español' || exit 0
+          git add -A onlyoffice-preview
+          git commit -m 'Actualizar Waltiva a ONLYOFFICE 9.3 en español' || exit 0
           git push origin main

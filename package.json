@@ -1,18 +1,14 @@
 {
   "name": "waltiva-onlyoffice-local",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "keywords": [
     "onlyoffice",
     "vue3",
-    "element-plus",
     "wasm",
-    "wasm-pack",
     "typescript",
-    "pinia",
-    "vite",
-    "esm"
+    "waltiva"
   ],
   "homepage": "https://acewalt.github.io/Waltiva/",
   "scripts": {
@@ -29,7 +25,8 @@
     "element-plus": "^2.9.11",
     "pinia": "^3.0.1",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0",
+    "wasm-onlyoffice-sdk": "0.1.4"
   },
   "devDependencies": {
     "@arco-design/web-vue": "^2.57.0",
