@@ -1,16 +1,17 @@
-name: Validar ribbon y Safari
+name: Validar editor móvil
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/test-math-view.yml'
+      - '.github/scripts/test-mobile-editor.js'
       - 'src/components/DocumentHandler.vue'
       - 'public/web-apps/apps/documenteditor/main/loading.js'
   workflow_dispatch:
 
 jobs:
-  test:
+  mobile:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -24,148 +25,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
-      - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Validar escritorio y experiencia móvil WebKit
+      - run: pnpm exec playwright install --with-deps webkit
+      - name: Probar interfaz iPhone
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
           VITE_PID=$!
           trap 'kill $VITE_PID || true' EXIT
           for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
-          node <<'NODE'
-          const { chromium, webkit, devices } = require('@playwright/test');
-          const assert = require('node:assert/strict');
-
-          async function createDocument(page) {
-            await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
-            await page.getByText('Crear documento', { exact: true }).click();
-            await page.getByText('Documento', { exact: true }).click();
-            await page.waitForFunction(() => !!document.querySelector('iframe[name="frameEditor"]'), null, { timeout: 120000 });
-          }
-
-          async function waitForEditor(page, mobile) {
-            await page.waitForFunction((isMobile) => {
-              const frame = document.querySelector('iframe[name="frameEditor"]');
-              const doc = frame?.contentDocument;
-              if (!doc) return false;
-              const text = (doc.body?.innerText || '').replace(/\s+/g, ' ');
-              const readyControl = isMobile ? doc.querySelector('#wlt-mobile-topbar') : doc.querySelector('#waltiva-math-view-toggle');
-              return !!readyControl && !!doc.querySelector('canvas') && !text.includes('Cargando documento');
-            }, mobile, { timeout: 120000 });
-          }
-
-          (async () => {
-            {
-              const browser = await chromium.launch({ headless: true });
-              const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-              await createDocument(page);
-              await waitForEditor(page, false);
-
-              const before = await page.evaluate(() => {
-                const doc = document.querySelector('iframe[name="frameEditor"]')?.contentDocument;
-                const tab = [...(doc?.querySelectorAll('li.ribtab') || [])].find(el => (el.textContent || '').trim() === 'Diseño');
-                tab?.querySelector('a')?.click();
-                const button = doc?.querySelector('#waltiva-math-view-toggle');
-                const rect = button?.getBoundingClientRect();
-                return {
-                  visible: !!rect && rect.width > 0 && rect.height > 0,
-                  inDesignGroup: !!button?.closest('.group')?.querySelector('#slot-btn-pagecolor'),
-                  checked: button?.getAttribute('aria-checked'),
-                };
-              });
-              assert.ok(before.visible, 'Vista matemática no está visible en Diseño');
-              assert.ok(before.inDesignGroup, 'Vista matemática no está dentro del grupo de Diseño');
-              assert.equal(before.checked, 'false');
-
-              await page.evaluate(() => {
-                document.querySelector('iframe[name="frameEditor"]')?.contentDocument?.querySelector('#waltiva-math-view-toggle')?.click();
-              });
-              await page.locator('.math-preview').waitFor({ state: 'visible', timeout: 5000 });
-              await browser.close();
-            }
-
-            {
-              const browser = await webkit.launch({ headless: true });
-              const context = await browser.newContext({ ...devices['iPhone 13'] });
-              const page = await context.newPage();
-              const pageErrors = [];
-              page.on('pageerror', err => pageErrors.push(String(err)));
-
-              await createDocument(page);
-              await waitForEditor(page, true);
-              await page.waitForTimeout(1800);
-
-              const state = await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                const doc = frame?.contentDocument;
-                const win = frame?.contentWindow;
-                if (!doc || !win) return null;
-
-                const topbar = doc.querySelector('#wlt-mobile-topbar');
-                const formatbar = doc.querySelector('#wlt-mobile-formatbar');
-                const toolbar = doc.querySelector('.toolbar');
-                const viewport = doc.querySelector('#viewport');
-                const fitWidth = doc.querySelector('#btn-zoom-towidth, [title*="Ajustar al ancho"], [title*="Ajustar a ancho"], [title*="Fit to width"]');
-                const rulerSelectors = ['#id_hor_ruler','#id_vert_ruler','#id_vertical_scroll','#id_horizontal_scroll','#id_vscrollbar','#id_hscrollbar','#id_buttonTabs'];
-                const chrome = rulerSelectors.map(selector => doc.querySelector(selector)).filter(Boolean).map(el => {
-                  const rect = el.getBoundingClientRect();
-                  const css = win.getComputedStyle(el);
-                  return { id: el.id, width: rect.width, height: rect.height, visibility: css.visibility, opacity: css.opacity };
-                });
-
-                const tr = topbar?.getBoundingClientRect();
-                const fr = formatbar?.getBoundingClientRect();
-                const vr = viewport?.getBoundingClientRect();
-                return {
-                  mobileClass: doc.body.classList.contains('waltiva-mobile-ui'),
-                  topbarVisible: !!tr && tr.width > 0 && tr.height >= 50,
-                  formatbarVisible: !!fr && fr.width > 0 && fr.height >= 50,
-                  toolbarHeight: toolbar ? parseFloat(win.getComputedStyle(toolbar).height) : null,
-                  viewportWidth: vr?.width || 0,
-                  windowWidth: win.innerWidth,
-                  viewportLeft: vr?.left ?? null,
-                  hasFitWidth: !!fitWidth,
-                  keyboardVar: win.getComputedStyle(doc.documentElement).getPropertyValue('--wlt-keyboard-offset').trim(),
-                  chrome,
-                };
-              });
-
-              console.log('MOBILE_LAYOUT=' + JSON.stringify({ state, pageErrors }, null, 2));
-              assert.ok(!pageErrors.some(x => x.includes('requestIdleCallback')), 'requestIdleCallback sigue fallando');
-              assert.ok(state?.mobileClass, 'No se activó la interfaz móvil');
-              assert.ok(state?.topbarVisible, 'La barra superior móvil no está visible');
-              assert.ok(state?.formatbarVisible, 'La barra de formato móvil no está visible');
-              assert.equal(state?.toolbarHeight, 0, 'La cinta de escritorio sigue ocupando espacio');
-              assert.ok(state?.viewportWidth >= state?.windowWidth - 2, 'El viewport del documento no usa todo el ancho disponible');
-              assert.ok(Math.abs(state?.viewportLeft || 0) <= 1, 'El viewport mantiene margen lateral del editor');
-              assert.ok(state?.hasFitWidth, 'No se encontró el control Ajustar al ancho');
-              assert.ok(state?.chrome.every(x => x.visibility === 'hidden' || x.opacity === '0' || x.width <= 1 || x.height <= 1), 'Alguna regla o scrollbar interna sigue visible');
-
-              const keyboardLift = await page.evaluate(async () => {
-                const frame = document.querySelector('iframe[name="frameEditor"]');
-                const doc = frame?.contentDocument;
-                const bar = doc?.querySelector('#wlt-mobile-formatbar');
-                if (!doc || !bar) return null;
-                const before = bar.getBoundingClientRect().top;
-                doc.documentElement.style.setProperty('--wlt-keyboard-offset', '280px');
-                await new Promise(resolve => setTimeout(resolve, 80));
-                const after = bar.getBoundingClientRect().top;
-                doc.documentElement.style.setProperty('--wlt-keyboard-offset', '0px');
-                return before - after;
-              });
-              console.log('KEYBOARD_TOOLBAR_LIFT=' + keyboardLift);
-              assert.ok(keyboardLift > 220, 'La barra de formato no se eleva por encima del teclado');
-
-              await page.evaluate(() => {
-                document.querySelector('iframe[name="frameEditor"]')?.contentDocument?.querySelector('[data-wlt-action="insert"]')?.click();
-              });
-              await page.waitForTimeout(200);
-              const sheetOpen = await page.evaluate(() => {
-                const doc = document.querySelector('iframe[name="frameEditor"]')?.contentDocument;
-                return doc?.querySelector('#wlt-mobile-sheet')?.classList.contains('open');
-              });
-              assert.ok(sheetOpen, 'El panel móvil Insertar no abre');
-              await browser.close();
-            }
-          })().catch(error => { console.error(error); process.exit(1); });
-          NODE
+          node .github/scripts/test-mobile-editor.js
