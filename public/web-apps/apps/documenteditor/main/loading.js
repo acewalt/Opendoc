@@ -3,6 +3,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 /* Waltiva Mobile UI -------------------------------------------------------
  * Capa de interfaz responsive sobre ONLYOFFICE. Mantiene el motor y los
  * comandos originales, pero evita comprimir el ribbon de escritorio en iOS.
+ * Waltiva Mobile UX v2: chrome persistente, quick tools desplazables y pinch zoom.
  */
 (function () {
     'use strict'
@@ -14,8 +15,10 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
     var syncTimer = null
     var waitTimer = null
     var currentSheet = ''
+    var quickMode = 'inicio'
     var keyboardOffset = 0
     var maxVisualViewportHeight = 0
+    var visualTop = 0
 
     function isMobileLayout() {
         if (window.matchMedia && window.matchMedia('(max-width: ' + MOBILE_MAX + 'px)').matches) return true
@@ -51,7 +54,12 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         color: svg('<path d="M7 17L12 5l5 12M9 13h6"/><path d="M5 20h14"/>'),
         tools: svg('<path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9" cy="6" r="1.8" class="fill-bg"/><circle cx="15" cy="12" r="1.8" class="fill-bg"/><circle cx="11" cy="18" r="1.8" class="fill-bg"/>'),
         download: svg('<path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/>'),
-        chevron: svg('<path d="M9 6l6 6-6 6"/>')
+        chevron: svg('<path d="M9 6l6 6-6 6"/>'),
+        link: svg('<path d="M10 13a4 4 0 0 0 5.7.1l2.4-2.4a4 4 0 0 0-5.7-5.7L11 6.4"/><path d="M14 11a4 4 0 0 0-5.7-.1l-2.4 2.4a4 4 0 0 0 5.7 5.7l1.4-1.4"/>'),
+        highlight: svg('<path d="M6 15l8-8 4 4-8 8H6z"/><path d="M13 8l4 4M4 21h16"/>'),
+        bullets: svg('<circle cx="5" cy="7" r="1" class="fill"/><circle cx="5" cy="12" r="1" class="fill"/><circle cx="5" cy="17" r="1" class="fill"/><path d="M9 7h10M9 12h10M9 17h10"/>'),
+        numbering: svg('<path d="M4 6h2M5 5v4M4 12c2-2 3 0 0 2h2M4 17h2l-2 2h2M9 7h10M9 12h10M9 17h10"/>'),
+        align: svg('<path d="M4 6h16M4 10h12M4 14h16M4 18h10"/>')
     }
 
     function makeButton(className, label, icon, text) {
@@ -61,9 +69,9 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 
     function styleText() {
         return [
-            ':root{--wlt-mobile-top:56px;--wlt-mobile-bottom:78px;--wlt-keyboard-offset:0px;}',
+            ':root{--wlt-mobile-top:56px;--wlt-mobile-bottom:84px;--wlt-keyboard-offset:0px;--wlt-visual-top:0px;}',
             'body.waltiva-mobile-ui{overflow:hidden!important;background:#fff!important;--canvas-background:#fff!important;--canvas-content-background:#fff!important;--canvas-page-border:#fff!important;}',
-            'body.waltiva-mobile-ui #viewport{top:calc(var(--wlt-mobile-top) + env(safe-area-inset-top,0px))!important;bottom:calc(var(--wlt-mobile-bottom) + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px))!important;left:0!important;right:0!important;width:auto!important;background:#fff!important;}',
+            'body.waltiva-mobile-ui #viewport{top:calc(var(--wlt-visual-top) + var(--wlt-mobile-top) + env(safe-area-inset-top,0px))!important;bottom:calc(var(--wlt-mobile-bottom) + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px))!important;left:0!important;right:0!important;width:auto!important;background:#fff!important;touch-action:pan-x pan-y!important;}',
             'body.waltiva-mobile-ui.waltiva-mobile-view-mode #viewport{bottom:0!important;}',
             'body.waltiva-mobile-ui #editor-container,body.waltiva-mobile-ui #editor_sdk{left:0!important;right:0!important;width:100%!important;max-width:none!important;background:#fff!important;}',
             'body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_hor_ruler,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vert_ruler,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vertical_scroll,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_horizontal_scroll,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vscrollbar,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_hscrollbar,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_buttonTabs{visibility:hidden!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;}',
@@ -73,7 +81,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             'body.waltiva-mobile-ui .statusbar{height:0!important;min-height:0!important;max-height:0!important;overflow:hidden!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;}',
             'body.waltiva-mobile-ui.waltiva-mobile-native-ribbon .toolbar{height:99px!important;min-height:99px!important;max-height:none!important;overflow:visible!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}',
             'body.waltiva-mobile-ui.waltiva-mobile-native-ribbon .statusbar{height:25px!important;min-height:25px!important;max-height:25px!important;overflow:visible!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;}',
-            '.wlt-mobile-topbar{position:fixed;z-index:12000;top:0;left:0;right:0;height:calc(var(--wlt-mobile-top) + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 10px 0;display:flex;align-items:center;background:#4b4b4b;color:#fff;border-bottom:1px solid rgba(255,255,255,.13);font:16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none;}',
+            '.wlt-mobile-topbar{position:fixed;z-index:12000;top:var(--wlt-visual-top);left:0;right:0;height:calc(var(--wlt-mobile-top) + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 10px 0;display:flex;align-items:center;background:#4b4b4b;color:#fff;border-bottom:1px solid rgba(255,255,255,.13);font:16px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-user-select:none;user-select:none;will-change:top;}',
             '.wlt-mobile-topbar .wlt-mobile-row{width:100%;height:56px;display:flex;align-items:center;gap:2px;}',
             '.wlt-mobile-topbar .wlt-view-row{display:none;}',
             'body.waltiva-mobile-view-mode .wlt-mobile-topbar .wlt-edit-row{display:none;}',
@@ -87,14 +95,19 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             '.wlt-mobile-btn.wlt-done{padding:0 8px 0 2px;font-size:17px;font-weight:500;}',
             '.wlt-mobile-btn.wlt-close{min-width:40px;padding-left:2px;}',
             '.wlt-mobile-btn.wlt-disabled{opacity:.35;pointer-events:none;}',
-            '.wlt-mobile-formatbar{position:fixed;z-index:12000;left:50%;bottom:calc(10px + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:calc(100% - 28px);max-width:560px;height:58px;padding:0 8px;display:none;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:30px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);will-change:bottom;}',
+            '.wlt-mobile-formatbar{position:fixed;z-index:12000;left:50%;bottom:calc(18px + var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:calc(100% - 24px);max-width:560px;height:60px;padding:0 7px;display:none;align-items:center;justify-content:flex-start;overflow:hidden;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:31px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);will-change:bottom;}',
             'body.waltiva-mobile-ui.waltiva-mobile-keyboard-open:not(.waltiva-mobile-view-mode) .wlt-mobile-formatbar{display:flex;}',
-            '.wlt-mobile-viewbar{position:fixed;z-index:12000;left:50%;bottom:calc(10px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(320px,calc(100% - 62px));height:58px;padding:0 9px;display:none;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:30px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}',
+            '.wlt-mobile-viewbar{position:fixed;z-index:12000;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(326px,calc(100% - 54px));height:60px;padding:0 9px;display:none;align-items:center;justify-content:space-around;background:rgba(29,29,29,.97);color:#fff;border:1px solid rgba(255,255,255,.13);border-radius:31px;box-shadow:0 10px 35px rgba(0,0,0,.28);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}',
             'body.waltiva-mobile-view-mode .wlt-mobile-viewbar{display:flex;}',
             'body.waltiva-mobile-keyboard-open .wlt-mobile-viewbar{display:none;}',
             '.wlt-mobile-viewbar .wlt-mobile-btn{height:46px;min-width:52px;padding:0 11px;border-radius:20px;}',
             '.wlt-mobile-viewbar .wlt-mobile-btn svg{width:27px;height:27px;}',
-            '.wlt-mobile-formatbar .wlt-mobile-btn{height:46px;min-width:42px;padding:0 8px;border-radius:20px;font-size:21px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
+            '.wlt-mobile-tools-scroll{width:100%;height:100%;display:flex;align-items:center;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain;}',
+            '.wlt-mobile-tools-scroll::-webkit-scrollbar{display:none;}',
+            '.wlt-quick-group{display:none;align-items:center;gap:2px;min-width:max-content;padding:0 2px;}',
+            '.wlt-mobile-formatbar[data-wlt-mode="inicio"] .wlt-quick-home{display:flex;}',
+            '.wlt-mobile-formatbar[data-wlt-mode="insertar"] .wlt-quick-insert{display:flex;}',
+            '.wlt-mobile-formatbar .wlt-mobile-btn{height:46px;min-width:44px;flex:0 0 44px;padding:0 7px;border-radius:20px;font-size:21px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}',
             '.wlt-mobile-formatbar .wlt-mobile-btn svg{width:25px;height:25px;}',
             '.wlt-mobile-formatbar .wlt-mobile-btn.wlt-active{background:#fff;color:#202020;}',
             '.wlt-mobile-formatbar .wlt-format-letter{font-family:Georgia,"Times New Roman",serif;font-size:25px;}',
@@ -104,7 +117,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             '.wlt-mobile-formatbar .wlt-strike{text-decoration:line-through;}',
             '.wlt-mobile-sheet-mask{position:fixed;z-index:12990;inset:0;background:rgba(0,0,0,.18);display:none;}',
             '.wlt-mobile-sheet-mask.open{display:block;}',
-            '.wlt-mobile-sheet{position:fixed;z-index:13000;left:0;right:0;bottom:0;max-height:min(65vh,560px);display:none;flex-direction:column;color:#f3f3f3;background:#1f1f1f;border-radius:28px 28px 0 0;box-shadow:0 -14px 45px rgba(0,0,0,.36);font:16px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0px);}',
+            '.wlt-mobile-sheet{position:fixed;z-index:13000;left:0;right:0;bottom:0;max-height:min(82vh,720px);max-height:min(82dvh,720px);display:none;flex-direction:column;color:#f3f3f3;background:#1f1f1f;border-radius:28px 28px 0 0;box-shadow:0 -14px 45px rgba(0,0,0,.36);font:16px/1.25 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));}',
             '.wlt-mobile-sheet.open{display:flex;}',
             '.wlt-mobile-sheet-handle{width:42px;height:5px;border-radius:4px;background:#8a8a8a;margin:10px auto 6px;}',
             '.wlt-mobile-sheet-head{display:flex;align-items:center;padding:4px 18px 11px;gap:8px;}',
@@ -187,12 +200,19 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
     function sheetContent(kind) {
         if (kind === 'inicio') {
             return [
+                sheetRow('fontname', icons.format, 'Fuente', 'Calibri', true),
+                sheetRow('fontsize', icons.format, 'Tamaño de fuente', '11', true),
                 sheetRow('bold', icons.format, 'Negrita'),
                 sheetRow('italic', icons.format, 'Cursiva'),
                 sheetRow('underline', icons.format, 'Subrayado'),
                 sheetRow('strike', icons.format, 'Tachado'),
-                sheetRow('fontcolor', icons.color, 'Color del texto'),
-                sheetRow('math', icons.math, 'Vista matemática')
+                sheetRow('highlight', icons.highlight, 'Color de resaltado', '', true),
+                sheetRow('fontcolor', icons.color, 'Color de fuente', '', true),
+                sheetRow('bullets', icons.bullets, 'Viñetas', '', true),
+                sheetRow('numbering', icons.numbering, 'Numeración', '', true),
+                sheetRow('align-left', icons.align, 'Alineación y párrafo', '', true),
+                sheetRow('math', icons.math, 'Vista matemática'),
+                sheetRow('search', icons.search, 'Buscar')
             ].join('')
         }
         if (kind === 'mas') {
@@ -207,24 +227,29 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             ].join('')
         }
         return [
-            sheetRow('page', icons.page, 'Página', '', true),
-            sheetRow('table', icons.table, 'Tabla', '', true),
-            sheetRow('image', icons.image, 'Imágenes', '', true),
-            sheetRow('camera', icons.camera, 'Cámara / fotos', 'Usa el selector de imágenes del dispositivo', true),
             sheetRow('shape', icons.shape, 'Formas', '', true),
             sheetRow('textbox', icons.text, 'Cuadro de texto', '', true),
-            sheetRow('equation', icons.equation, 'Ecuación', '', true)
+            sheetRow('image', icons.image, 'Imágenes de archivo', '', true),
+            sheetRow('image', icons.image, 'Imágenes en línea', '', true),
+            sheetRow('link', icons.link, 'Vínculo', '', true),
+            sheetRow('comment', icons.comment, 'Comentario', '', true),
+            sheetRow('equation', icons.equation, 'Ecuación', '', true),
+            sheetRow('page', icons.page, 'Página / salto de página', '', true),
+            sheetRow('table', icons.table, 'Tabla', '', true),
+            sheetRow('native', icons.tools, 'Más opciones de inserción', 'Abrir herramientas completas')
         ].join('')
     }
 
     function openSheet(kind) {
         currentSheet = kind || 'insertar'
+        if (currentSheet === 'inicio' || currentSheet === 'insertar') hideKeyboard()
         var sheet = document.getElementById('wlt-mobile-sheet')
         var mask = document.getElementById('wlt-mobile-sheet-mask')
         var list = document.getElementById('wlt-mobile-sheet-list')
         var title = document.getElementById('wlt-mobile-sheet-title')
         if (!sheet || !mask || !list || !title) return
         title.textContent = currentSheet === 'inicio' ? 'Inicio' : currentSheet === 'mas' ? 'Más' : 'Insertar'
+        title.setAttribute('data-wlt-action', currentSheet === 'mas' ? '' : 'switch-sheet')
         list.innerHTML = sheetContent(currentSheet)
         sheet.classList.add('open')
         mask.classList.add('open')
@@ -278,7 +303,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             document.body.classList.remove('waltiva-mobile-keyboard-open')
         }
         setTimeout(resizeEditor, 50)
-        setTimeout(function () { fitWidthWhenReady(0) }, 120)
     }
 
     function toggleNativeRibbon() {
@@ -299,6 +323,80 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         try { window.history.back() } catch (e2) {}
     }
 
+    function setQuickMode(mode) {
+        quickMode = mode === 'insertar' ? 'insertar' : 'inicio'
+        var bar = document.getElementById('wlt-mobile-formatbar')
+        if (!bar) return
+        bar.setAttribute('data-wlt-mode', quickMode)
+        var scroller = bar.querySelector('.wlt-mobile-tools-scroll')
+        if (scroller) scroller.scrollLeft = 0
+    }
+
+    function zoomByStep(direction) {
+        var selectors = direction > 0
+            ? ['#btn-zoom-in', '.btn-zoom-in', '[title*="Acercar"]', '[title*="Zoom in"]']
+            : ['#btn-zoom-out', '.btn-zoom-out', '[title*="Alejar"]', '[title*="Zoom out"]']
+        return clickControl(selectors, direction > 0 ? 'No se pudo acercar el documento.' : 'No se pudo alejar el documento.')
+    }
+
+    function bindDocumentPinchZoom() {
+        var pinchActive = false
+        var startDistance = 0
+        var gestureScale = 1
+        function insideViewport(target) {
+            return !!(target && (target.id === 'viewport' || (target.closest && target.closest('#viewport'))))
+        }
+        function distance(touches) {
+            if (!touches || touches.length < 2) return 0
+            var dx = touches[0].clientX - touches[1].clientX
+            var dy = touches[0].clientY - touches[1].clientY
+            return Math.sqrt(dx * dx + dy * dy)
+        }
+        document.addEventListener('touchstart', function (event) {
+            if (event.touches && event.touches.length === 2 && insideViewport(event.target)) {
+                pinchActive = true
+                startDistance = distance(event.touches)
+            }
+        }, { passive: false, capture: true })
+        document.addEventListener('touchmove', function (event) {
+            if (!pinchActive || !event.touches || event.touches.length !== 2) return
+            event.preventDefault()
+            var next = distance(event.touches)
+            if (!startDistance || !next) return
+            var ratio = next / startDistance
+            if (ratio > 1.12) {
+                zoomByStep(1)
+                startDistance = next
+            } else if (ratio < 0.89) {
+                zoomByStep(-1)
+                startDistance = next
+            }
+        }, { passive: false, capture: true })
+        document.addEventListener('touchend', function (event) {
+            if (!event.touches || event.touches.length < 2) {
+                pinchActive = false
+                startDistance = 0
+            }
+        }, { passive: true, capture: true })
+        document.addEventListener('gesturestart', function (event) {
+            if (!insideViewport(event.target)) return
+            gestureScale = 1
+            event.preventDefault()
+        }, { passive: false, capture: true })
+        document.addEventListener('gesturechange', function (event) {
+            if (!insideViewport(event.target)) return
+            event.preventDefault()
+            var scale = event.scale || 1
+            if (scale / gestureScale > 1.14) {
+                zoomByStep(1)
+                gestureScale = scale
+            } else if (scale / gestureScale < 0.87) {
+                zoomByStep(-1)
+                gestureScale = scale
+            }
+        }, { passive: false, capture: true })
+    }
+
     function performAction(action) {
         var ok = true
         switch (action) {
@@ -306,7 +404,10 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             case 'edit': setEditing(true); return
             case 'fit-width': fitWidthWhenReady(0); toast('Documento ajustado al ancho.'); return
             case 'close-document': closeDocument(); return
-            case 'insert': openSheet('insertar'); return
+            case 'insert': setQuickMode('insertar'); return
+            case 'quick-toggle': setQuickMode(quickMode === 'inicio' ? 'insertar' : 'inicio'); return
+            case 'quick-more': openSheet(quickMode); return
+            case 'switch-sheet': if (currentSheet === 'inicio' || currentSheet === 'insertar') openSheet(currentSheet === 'inicio' ? 'insertar' : 'inicio'); return
             case 'format': openSheet('inicio'); return
             case 'more': openSheet('mas'); return
             case 'close-sheet': closeSheet(); return
@@ -320,6 +421,13 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             case 'underline': ok = clickControl(['.toolbar .btn-underline', '.btn-underline']); break
             case 'strike': ok = clickControl(['.toolbar .btn-strikeout', '.btn-strikeout']); break
             case 'fontcolor': ok = clickControl(['.toolbar .btn-fontcolor', '.btn-fontcolor']); break
+            case 'highlight': ok = clickControl(['.toolbar .btn-highlight', '.toolbar .btn-marker', '.btn-highlight', '.btn-marker']); break
+            case 'bullets': ok = clickControl(['.toolbar .btn-bullets', '.btn-bullets', '[title*="Viñetas"]', '[title*="Bullets"]']); break
+            case 'numbering': ok = clickControl(['.toolbar .btn-numbering', '.btn-numbering', '[title*="Numeración"]', '[title*="Numbering"]']); break
+            case 'align-left': ok = clickControl(['.toolbar .btn-align-left', '.btn-align-left', '[title*="Alinear a la izquierda"]', '[title*="Align left"]']); break
+            case 'fontname': ok = clickControl(['.toolbar .combo-fontname', '.combo-fontname', '#font-combo']); break
+            case 'fontsize': ok = clickControl(['.toolbar .combo-fontsize', '.combo-fontsize', '#fontsize-combo']); break
+            case 'link': closeSheet(); ok = clickControl(['.toolbar .btn-insertlink', '.btn-insertlink', '[title*="Vínculo"]', '[title*="Link"]']); break
             case 'search': closeSheet(); ok = clickControl(['.btn-menu-search', '[title*="Buscar"]', '[title*="Search"]']); break
             case 'share': closeSheet(); ok = clickControl(['.btn-share', '.btn-header-share', '[title*="Compartir"]', '[title*="Share"]'], 'Compartir no está habilitado en este documento.'); break
             case 'comment': closeSheet(); ok = clickControl(['.btn-comments', '.btn-menu-comments', '[title*="Comentario"]', '[title*="Comment"]'], 'Los comentarios no están disponibles.'); break
@@ -398,12 +506,19 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
     function updateVisualViewport(resetBase) {
         var vv = getVisualViewportSource()
         if (!vv || !document.documentElement) return
-        var visibleBottom = Math.max(0, Math.round(vv.height + (vv.offsetTop || 0)))
-        if (resetBase || !maxVisualViewportHeight || visibleBottom > maxVisualViewportHeight) {
-            maxVisualViewportHeight = visibleBottom
+
+        var nextVisualTop = Math.max(0, Math.round(vv.offsetTop || 0))
+        if (visualTop !== nextVisualTop) {
+            visualTop = nextVisualTop
+            document.documentElement.style.setProperty('--wlt-visual-top', visualTop + 'px')
         }
-        var nextOffset = Math.max(0, maxVisualViewportHeight - visibleBottom)
-        // Safari puede mover sus barras unos pocos píxeles; el teclado produce una reducción mucho mayor.
+
+        var visibleHeight = Math.max(0, Math.round(vv.height || 0))
+        if (resetBase || !maxVisualViewportHeight || visibleHeight > maxVisualViewportHeight) {
+            maxVisualViewportHeight = visibleHeight
+        }
+        var nextOffset = Math.max(0, maxVisualViewportHeight - visibleHeight)
+        // Cambios pequeños suelen ser la barra dinámica de Safari; el teclado reduce mucho más la altura.
         if (nextOffset < 110) nextOffset = 0
         if (nextOffset > 0 && !editing) {
             editing = true
@@ -414,7 +529,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         document.documentElement.style.setProperty('--wlt-keyboard-offset', keyboardOffset + 'px')
         if (document.body) document.body.classList.toggle('waltiva-mobile-keyboard-open', keyboardOffset > 0)
         setTimeout(resizeEditor, 20)
-        setTimeout(function () { fitWidthWhenReady(0) }, 90)
     }
 
     function bindEvents() {
@@ -457,9 +571,9 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             setTimeout(function () {
                 updateVisualViewport(true)
                 resizeEditor()
-                fitWidthWhenReady(0)
             }, 220)
         })
+        bindDocumentPinchZoom()
     }
 
     function install() {
@@ -501,14 +615,36 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         var formatbar = document.createElement('div')
         formatbar.id = 'wlt-mobile-formatbar'
         formatbar.className = 'wlt-mobile-formatbar'
+        formatbar.setAttribute('data-wlt-mode', quickMode)
         formatbar.innerHTML =
-            makeButton('', 'Insertar', icons.plus, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="insert"') +
-            '<button type="button" class="wlt-mobile-btn wlt-bold" data-wlt-action="bold" aria-label="Negrita">N</button>' +
-            '<button type="button" class="wlt-mobile-btn wlt-format-letter wlt-italic" data-wlt-action="italic" aria-label="Cursiva">K</button>' +
-            '<button type="button" class="wlt-mobile-btn wlt-format-letter wlt-underline" data-wlt-action="underline" aria-label="Subrayado">S</button>' +
-            '<button type="button" class="wlt-mobile-btn wlt-format-letter wlt-strike" data-wlt-action="strike" aria-label="Tachado">S</button>' +
-            makeButton('', 'Color del texto', icons.color, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="fontcolor"') +
-            makeButton('', 'Ocultar teclado', icons.keyboard, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="keyboard"')
+            '<div class="wlt-mobile-tools-scroll">' +
+                '<div class="wlt-quick-group wlt-quick-home">' +
+                    makeButton('', 'Insertar', icons.plus, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="quick-toggle"') +
+                    '<button type="button" class="wlt-mobile-btn wlt-bold" data-wlt-action="bold" aria-label="Negrita">N</button>' +
+                    '<button type="button" class="wlt-mobile-btn wlt-format-letter wlt-italic" data-wlt-action="italic" aria-label="Cursiva">K</button>' +
+                    '<button type="button" class="wlt-mobile-btn wlt-format-letter wlt-underline" data-wlt-action="underline" aria-label="Subrayado">S</button>' +
+                    '<button type="button" class="wlt-mobile-btn wlt-format-letter wlt-strike" data-wlt-action="strike" aria-label="Tachado">S</button>' +
+                    makeButton('', 'Resaltado', icons.highlight, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="highlight"') +
+                    makeButton('', 'Color de fuente', icons.color, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="fontcolor"') +
+                    makeButton('', 'Viñetas', icons.bullets, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="bullets"') +
+                    makeButton('', 'Numeración', icons.numbering, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="numbering"') +
+                    makeButton('', 'Alineación', icons.align, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="align-left"') +
+                    makeButton('', 'Más herramientas de Inicio', icons.more, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="quick-more"') +
+                    makeButton('', 'Ocultar teclado', icons.keyboard, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="keyboard"') +
+                '</div>' +
+                '<div class="wlt-quick-group wlt-quick-insert">' +
+                    makeButton('', 'Volver a Inicio', icons.plus, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn wlt-active" data-wlt-action="quick-toggle"') +
+                    makeButton('', 'Tabla', icons.table, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="table"') +
+                    makeButton('', 'Imagen', icons.image, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="image"') +
+                    makeButton('', 'Formas', icons.shape, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="shape"') +
+                    makeButton('', 'Cuadro de texto', icons.text, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="textbox"') +
+                    makeButton('', 'Vínculo', icons.link, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="link"') +
+                    makeButton('', 'Comentario', icons.comment, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="comment"') +
+                    makeButton('', 'Ecuación', icons.equation, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="equation"') +
+                    makeButton('', 'Más herramientas de Insertar', icons.more, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="quick-more"') +
+                    makeButton('', 'Ocultar teclado', icons.keyboard, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="keyboard"') +
+                '</div>' +
+            '</div>'
         document.body.appendChild(formatbar)
 
         var viewbar = document.createElement('div')
@@ -533,7 +669,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         sheet.innerHTML =
             '<div class="wlt-mobile-sheet-handle"></div>' +
             '<div class="wlt-mobile-sheet-head">' +
-                '<button type="button" id="wlt-mobile-sheet-title" class="wlt-mobile-sheet-title">Insertar</button>' +
+                '<button type="button" id="wlt-mobile-sheet-title" class="wlt-mobile-sheet-title" data-wlt-action="switch-sheet">Insertar</button>' +
                 '<span class="wlt-mobile-sheet-spacer"></span>' +
                 makeButton('', 'Deshacer', icons.undo, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="undo"') +
                 makeButton('', 'Rehacer', icons.redo, '').replace('class="wlt-mobile-btn "', 'class="wlt-mobile-btn" data-wlt-action="redo"') +
@@ -551,8 +687,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         syncTimer = setInterval(syncFormatting, 450)
         waitForViewport(0)
         fitWidthWhenReady(0)
-        setTimeout(function () { fitWidthWhenReady(0) }, 900)
-        setTimeout(function () { fitWidthWhenReady(0) }, 1800)
         syncFormatting()
     }
 
