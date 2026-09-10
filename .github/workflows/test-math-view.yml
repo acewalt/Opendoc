@@ -24,8 +24,27 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
+      - name: Localizar primitivas matemáticas del SDK
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('public/sdkjs/word/sdk-all.js')
+          s = p.read_text(errors='ignore')
+          terms = ['asc_AddMath', 'AddMath', 'ParaMath', 'CMath', 'InsertMath', 'ConvertMath', 'asc_GetSelectedText']
+          for term in terms:
+              print(f'\n===== {term} =====')
+              start = 0
+              shown = 0
+              while shown < 8:
+                  i = s.find(term, start)
+                  if i < 0: break
+                  print(s[max(0, i-220):min(len(s), i+500)].replace('\n', ' '))
+                  start = i + len(term)
+                  shown += 1
+          PY
       - run: pnpm exec playwright install --with-deps chromium
-      - name: Probar Vista matemática en Word
+      - name: Probar Vista matemática y enumerar API de Word
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
@@ -42,9 +61,6 @@ jobs:
           (async () => {
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-            const pageErrors = [];
-            page.on('pageerror', error => pageErrors.push(error.message));
-
             await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
@@ -57,38 +73,50 @@ jobs:
             const input = page.locator('#waltiva-math-source');
             await input.fill('\\frac{x^2+1}{\\sqrt{y}}');
             await page.locator('.math-render math').waitFor({ state: 'visible' });
-            assert.equal(await page.locator('.math-render mfrac').count(), 1, 'Debe renderizar una fracción');
-            assert.equal(await page.locator('.math-render msup').count(), 1, 'Debe renderizar un superíndice');
-            assert.equal(await page.locator('.math-render msqrt').count(), 1, 'Debe renderizar una raíz');
+            assert.equal(await page.locator('.math-render mfrac').count(), 1);
+            assert.equal(await page.locator('.math-render msup').count(), 1);
+            assert.equal(await page.locator('.math-render msqrt').count(), 1);
 
             await page.waitForFunction(() => document.querySelectorAll('iframe').length > 0, null, { timeout: 120000 });
-            const frames = await page.evaluate(() => Array.from(document.querySelectorAll('iframe')).map(frame => ({ id: frame.id, name: frame.name, src: frame.src })));
-            console.log('Iframes encontrados:', frames);
-
             await page.waitForTimeout(8000);
-            const bridge = await page.evaluate(() => {
-              const frame = document.querySelector('#iframe iframe') || document.querySelector('iframe#frameEditor') || document.querySelector('iframe');
+
+            const diagnostics = await page.evaluate(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
               const win = frame && frame.contentWindow;
-              if (!win) return { hasWindow: false, hasDE: false, hasApi: false, hasSelectedText: false };
+              if (!win) return { error: 'no iframe window' };
               const api = win.DE?.getController?.('Toolbar')?.api ||
                 win.DE?.getController?.('Main')?.api ||
                 win.DE?.getController?.('DocumentHolder')?.api ||
                 win.Asc?.editor || null;
+              if (!api) return { error: 'no api' };
+
+              const names = new Set();
+              let obj = api;
+              for (let depth = 0; obj && depth < 8; depth++, obj = Object.getPrototypeOf(obj)) {
+                for (const name of Object.getOwnPropertyNames(obj)) names.add(name);
+              }
+              const interesting = [...names]
+                .filter(name => /math|equat|text|paste|insert|select|search|find|undo|redo|remove|delete|replace/i.test(name))
+                .sort();
+              const lengths = {};
+              for (const name of interesting) {
+                try { if (typeof api[name] === 'function') lengths[name] = api[name].length; } catch {}
+              }
+              const ascMath = Object.keys(win.Asc || {}).filter(name => /math|equat/i.test(name)).sort();
+              const globals = Object.keys(win).filter(name => /ParaMath|CMath|MathMenu|MathContent/i.test(name)).sort();
               return {
-                hasWindow: true,
-                hasDE: !!win.DE,
-                hasApi: !!api,
-                hasSelectedText: typeof api?.asc_GetSelectedText === 'function' || typeof api?.GetSelectedText === 'function' || typeof api?.getSelectedText === 'function',
+                interesting,
+                lengths,
+                ascMath,
+                globals,
+                hasAddMath: typeof api.asc_AddMath === 'function',
+                addMathLength: typeof api.asc_AddMath === 'function' ? api.asc_AddMath.length : null,
+                hasSelectedText: typeof api.asc_GetSelectedText === 'function',
               };
             });
-            console.log('ONLYOFFICE bridge:', bridge);
-            assert.equal(bridge.hasWindow, true, 'El iframe debe ser same-origin');
-            assert.equal(bridge.hasApi, true, 'Debe poder resolverse la API interna de Word');
-            assert.equal(bridge.hasSelectedText, true, 'Debe existir una API para leer la selección');
-
-            const fatal = pageErrors.filter(message => !/Cannot read properties of undefined \(reading '0'\)/.test(message));
-            if (fatal.length) console.log('Page errors observados:', fatal);
-
+            console.log('NATIVE_MATH_DIAGNOSTICS=' + JSON.stringify(diagnostics, null, 2));
+            assert.equal(diagnostics.hasSelectedText, true);
+            assert.equal(diagnostics.hasAddMath, true);
             await browser.close();
           })().catch(error => {
             console.error(error);
