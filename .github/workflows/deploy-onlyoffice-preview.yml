@@ -6,6 +6,7 @@ on:
       - onlyoffice-engine
     paths:
       - '.github/workflows/deploy-onlyoffice-preview.yml'
+      - 'scripts/smoke-office.mjs'
       - 'src/**'
       - 'public/**'
       - 'index.html'
@@ -61,6 +62,20 @@ jobs:
           test -f html/v9.3.0.24-1/web-apps/apps/documenteditor/main/index.html
           test -f html/v9.3.0.24-1/web-apps/apps/spreadsheeteditor/main/index.html
           test -f html/v9.3.0.24-1/web-apps/apps/presentationeditor/main/index.html
+
+      - name: Install Chromium for runtime smoke test
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke test DOCX XLSX PPTX in Spanish
+        run: |
+          python3 -m http.server 4173 --directory html >/tmp/waltiva-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/smoke-office.mjs
 
       - name: Checkout current Pages branch
         uses: actions/checkout@v4
