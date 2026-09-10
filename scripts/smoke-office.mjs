@@ -50,7 +50,75 @@ try {
     if (chinese) throw new Error(`${testCase.ext}: todavía se detectaron etiquetas principales en chino`)
   }
 
-  console.log('\n[smoke] DOCX, XLSX y PPTX cargaron en español.')
+  console.log('\n[smoke] Probando ruta del editor interno de gráficos…')
+  await page.goto(`${baseUrl}?chart-smoke=${Date.now()}#/`, { waitUntil: 'domcontentloaded' })
+
+  const apiUrl = new URL('v9.3.0.24-1/web-apps/apps/api/documents/api.js', baseUrl).href
+  await page.addScriptTag({ url: apiUrl })
+
+  await page.evaluate(() => {
+    const old = document.getElementById('chart-editor-smoke')
+    old?.remove()
+
+    const host = document.createElement('div')
+    host.id = 'chart-editor-smoke'
+    document.body.appendChild(host)
+
+    // Se omite isLocalFile intencionalmente: los editores internos de gráficos,
+    // OLE y combinación se crean así desde ONLYOFFICE. Este era el caso que
+    // generaba una ruta de servidor inexistente en GitHub Pages.
+    window.__waltivaInternalEditorSmoke = new window.DocsAPI.DocEditor('chart-editor-smoke', {
+      type: 'desktop',
+      width: '800px',
+      height: '600px',
+      documentType: 'cell',
+      document: {
+        title: 'Datos del gráfico.xlsx',
+        fileType: 'xlsx',
+        url: 'about:blank',
+        key: 'waltiva-chart-smoke',
+        permissions: { edit: true },
+      },
+      editorConfig: {
+        mode: 'editdiagram',
+        lang: 'es',
+      },
+    })
+  })
+
+  const internalFrame = page.locator('#chart-editor-smoke').locator('xpath=following-sibling::iframe[1]')
+  const fallbackFrame = page.locator('iframe[name="frameEditor"]').last()
+  const frameLocator = (await internalFrame.count()) ? internalFrame : fallbackFrame
+  await frameLocator.waitFor({ state: 'attached', timeout: 30_000 })
+
+  const rawSrc = await frameLocator.getAttribute('src')
+  if (!rawSrc) throw new Error('Editor de gráficos: no se generó URL para index_internal.html')
+
+  const internalUrl = new URL(rawSrc, baseUrl)
+  const expectedPath = new URL(
+    'v9.3.0.24-1/web-apps/apps/spreadsheeteditor/main/index_internal.html',
+    baseUrl,
+  ).pathname
+
+  console.log(`[smoke] editor interno URL: ${internalUrl.href}`)
+
+  if (internalUrl.pathname !== expectedPath) {
+    throw new Error(
+      `Editor de gráficos: ruta incorrecta. Esperada ${expectedPath}, recibida ${internalUrl.pathname}`,
+    )
+  }
+
+  if (internalUrl.pathname.includes('/9.3.0-90621fd167d8090903a61c79b926eb27/')) {
+    throw new Error('Editor de gráficos: reapareció la carpeta de revisión de servidor')
+  }
+
+  const internalResponse = await page.request.get(internalUrl.href)
+  if (!internalResponse.ok()) {
+    throw new Error(`Editor de gráficos: index_internal.html respondió HTTP ${internalResponse.status()}`)
+  }
+
+  console.log(`[smoke] editor interno: HTTP ${internalResponse.status()}, ruta local correcta.`)
+  console.log('\n[smoke] DOCX, XLSX, PPTX y editor interno de gráficos pasaron correctamente.')
 } finally {
   await browser.close()
 }
