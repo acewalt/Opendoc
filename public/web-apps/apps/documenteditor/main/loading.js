@@ -3,7 +3,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
 /* Waltiva Mobile UI -------------------------------------------------------
  * Capa de interfaz responsive sobre ONLYOFFICE. Mantiene el motor y los
  * comandos originales, pero evita comprimir el ribbon de escritorio en iOS.
- * Waltiva Mobile UX v4: herramientas superiores estables, paneo táctil y acciones móviles directas.
+ * Waltiva Mobile UX v4.1: lienzo móvil estable, zoom legible y herramientas superiores fijas.
  */
 (function () {
     'use strict'
@@ -19,6 +19,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
     var keyboardOffset = 0
     var maxVisualViewportHeight = 0
     var visualTop = 0
+    var MOBILE_READABLE_ZOOM = 80
 
     function isMobileLayout() {
         if (window.matchMedia && window.matchMedia('(max-width: ' + MOBILE_MAX + 'px)').matches) return true
@@ -71,7 +72,7 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         return [
             ':root{--wlt-mobile-top:56px;--wlt-mobile-tools:64px;--wlt-mobile-bottom:0px;--wlt-keyboard-offset:0px;--wlt-visual-top:0px;}',
             'body.waltiva-mobile-ui{overflow:hidden!important;background:#fff!important;--canvas-background:#fff!important;--canvas-content-background:#fff!important;--canvas-page-border:#fff!important;}',
-            'body.waltiva-mobile-ui #viewport{top:calc(var(--wlt-visual-top) + var(--wlt-mobile-top) + var(--wlt-mobile-tools) + env(safe-area-inset-top,0px))!important;bottom:calc(var(--wlt-keyboard-offset) + env(safe-area-inset-bottom,0px))!important;left:0!important;right:0!important;width:auto!important;background:#fff!important;touch-action:none!important;overscroll-behavior:none!important;}',
+            'body.waltiva-mobile-ui #viewport{top:calc(var(--wlt-visual-top) + var(--wlt-mobile-top) + var(--wlt-mobile-tools) + env(safe-area-inset-top,0px))!important;bottom:env(safe-area-inset-bottom,0px)!important;left:0!important;right:0!important;width:auto!important;background:#fff!important;touch-action:none!important;overscroll-behavior:none!important;}',
             'body.waltiva-mobile-ui.waltiva-mobile-view-mode #viewport{bottom:0!important;}',
             'body.waltiva-mobile-ui #editor-container,body.waltiva-mobile-ui #editor_sdk{left:0!important;right:0!important;width:100%!important;max-width:none!important;background:#fff!important;}',
             'body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_hor_ruler,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vert_ruler,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vertical_scroll,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_horizontal_scroll,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_vscrollbar,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_hscrollbar,body.waltiva-mobile-ui:not(.waltiva-mobile-native-ribbon) #id_buttonTabs{visibility:hidden!important;opacity:0!important;pointer-events:none!important;overflow:hidden!important;}',
@@ -744,6 +745,14 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         }
     }
 
+    function ensureMobileReadableZoom() {
+        var api = getEditorApi()
+        if (!api) return false
+        var current = getCurrentZoomPercent(api)
+        if (current >= MOBILE_READABLE_ZOOM) return true
+        return setDocumentZoom(MOBILE_READABLE_ZOOM)
+    }
+
     function bindDocumentTouchNavigation() {
         var pinchActive = false
         var startDistance = 0
@@ -1080,7 +1089,10 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             if (api && api.WordControl && typeof api.WordControl.zoom_FitToWidth === 'function') {
                 resizeEditor()
                 api.WordControl.zoom_FitToWidth()
-                setTimeout(resizeEditor, 80)
+                setTimeout(function () {
+                    ensureMobileReadableZoom()
+                    resizeEditor()
+                }, 100)
                 return
             }
         } catch (error) {
@@ -1096,6 +1108,10 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
                 try { button.click() } catch (e2) {}
                 resizeEditor()
             }, 180)
+            setTimeout(function () {
+                ensureMobileReadableZoom()
+                resizeEditor()
+            }, 320)
             return
         }
         if (attempt < 50) setTimeout(function () { fitWidthWhenReady(attempt + 1) }, 300)
@@ -1133,7 +1149,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         keyboardOffset = nextOffset
         document.documentElement.style.setProperty('--wlt-keyboard-offset', keyboardOffset + 'px')
         if (document.body) document.body.classList.toggle('waltiva-mobile-keyboard-open', keyboardOffset > 0)
-        setTimeout(resizeEditor, 20)
     }
 
     function bindEvents() {
@@ -1152,7 +1167,6 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
         if (visualViewportSource) {
             var onVisualViewportChange = function () {
                 updateVisualViewport(false)
-                setTimeout(resizeEditor, 40)
             }
             visualViewportSource.addEventListener('resize', onVisualViewportChange)
             visualViewportSource.addEventListener('scroll', onVisualViewportChange)
@@ -1161,13 +1175,13 @@ if(!window.requestIdleCallback){window.requestIdleCallback=function(callback,opt
             if (window.parent && window.parent !== window) {
                 window.parent.addEventListener('resize', function () {
                     updateVisualViewport(false)
-                    setTimeout(resizeEditor, 60)
+                    if (!keyboardOffset) setTimeout(resizeEditor, 60)
                 })
             }
         } catch (e) {}
         window.addEventListener('resize', function () {
             updateVisualViewport(false)
-            setTimeout(resizeEditor, 60)
+            if (!keyboardOffset) setTimeout(resizeEditor, 60)
         })
         document.addEventListener('focusin', function () { setTimeout(function () { updateVisualViewport(false) }, 80) }, true)
         document.addEventListener('focusout', function () { setTimeout(function () { updateVisualViewport(false) }, 180) }, true)
