@@ -129,6 +129,7 @@ function createEditorInstance(config: {
         editorConfig: {
             lang: 'es',
             customization: {
+                ...(getDocumentType(fileType) === 'word' ? { uiTheme: 'theme-contrast-dark' } : {}),
                 help: false,
                 about: false,
                 hideRightMenu: true,
@@ -392,4 +393,3 @@ onBeforeUnmount(() => {
     height: 100%;
 }
 </style>
-
