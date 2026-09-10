@@ -1,4 +1,4 @@
-name: Diagnosticar ribbon y móvil
+name: Validar ribbon y Safari
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/test-math-view.yml'
       - 'src/components/DocumentHandler.vue'
+      - 'public/web-apps/apps/documenteditor/main/loading.js'
   workflow_dispatch:
 
 jobs:
@@ -24,24 +25,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm exec playwright install --with-deps chromium webkit
-      - name: Inspeccionar pestaña Diseño y carga tipo iPhone
+      - name: Validar Diseño y carga en WebKit
         shell: bash
         run: |
           pnpm exec vite preview --host 127.0.0.1 --port 4173 > /tmp/waltiva-vite.log 2>&1 &
           VITE_PID=$!
           trap 'kill $VITE_PID || true' EXIT
-          for i in {1..30}; do
-            curl -fsS http://127.0.0.1:4173/ >/dev/null && break
-            sleep 1
-          done
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
           node <<'NODE'
           const { chromium, webkit, devices } = require('@playwright/test');
+          const assert = require('node:assert/strict');
 
           async function openDocument(page) {
             await page.goto('http://127.0.0.1:4173/#/', { waitUntil: 'networkidle' });
             await page.getByText('Crear documento', { exact: true }).click();
             await page.getByText('Documento', { exact: true }).click();
-            await page.waitForFunction(() => document.querySelectorAll('iframe').length > 0, null, { timeout: 120000 });
+            await page.waitForFunction(() => document.querySelector('iframe[name="frameEditor"]'), null, { timeout: 120000 });
           }
 
           (async () => {
@@ -50,30 +49,25 @@ jobs:
               const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
               await openDocument(page);
               await page.waitForTimeout(8000);
-              const ribbon = await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
+              const design = await page.evaluate(() => {
+                const frame = document.querySelector('iframe[name="frameEditor"]');
                 const doc = frame?.contentDocument;
-                if (!doc) return { error: 'no iframe document' };
-                const clean = (el) => ({
-                  tag: el.tagName,
-                  id: el.id || '',
-                  cls: typeof el.className === 'string' ? el.className : '',
-                  role: el.getAttribute('role'),
-                  dataValue: el.getAttribute('data-value'),
-                  text: (el.textContent || '').trim().slice(0, 120),
-                });
-                const exact = [...doc.querySelectorAll('*')].filter(el => (el.textContent || '').trim() === 'Diseño');
-                return {
-                  frameUrl: frame?.src,
-                  matches: exact.slice(0, 10).map(el => ({
-                    self: clean(el),
-                    parent: el.parentElement ? clean(el.parentElement) : null,
-                    grand: el.parentElement?.parentElement ? clean(el.parentElement.parentElement) : null,
-                    great: el.parentElement?.parentElement?.parentElement ? clean(el.parentElement.parentElement.parentElement) : null,
-                  })),
+                if (!doc) return { error: 'no frame doc' };
+                const tab = [...doc.querySelectorAll('li.ribtab')].find(el => (el.textContent || '').trim() === 'Diseño');
+                tab?.querySelector('a')?.click();
+                const isVisible = el => {
+                  const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+                  return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0;
                 };
+                const candidates = [...doc.querySelectorAll('.toolbar [id], .toolbar [class], #viewport [id]')]
+                  .filter(isVisible)
+                  .map(el => ({ tag: el.tagName, id: el.id || '', cls: typeof el.className === 'string' ? el.className : '', text: (el.textContent || '').trim().replace(/\s+/g,' ').slice(0,100) }))
+                  .filter(x => /design|layout|theme|color|water|page|toolbar|tab/i.test(`${x.id} ${x.cls} ${x.text}`))
+                  .slice(0,120);
+                return { tabFound: !!tab, candidates };
               });
-              console.log('DESIGN_RIBBON=' + JSON.stringify(ribbon, null, 2));
+              console.log('DESIGN_CONTENT=' + JSON.stringify(design, null, 2));
+              assert.ok(design.tabFound);
               await browser.close();
             }
 
@@ -81,41 +75,21 @@ jobs:
               const browser = await webkit.launch({ headless: true });
               const context = await browser.newContext({ ...devices['iPhone 13'] });
               const page = await context.newPage();
-              const consoleErrors = [];
               const pageErrors = [];
-              page.on('console', msg => {
-                if (msg.type() === 'error' || msg.type() === 'warning') consoleErrors.push(msg.type() + ': ' + msg.text());
-              });
               page.on('pageerror', err => pageErrors.push(String(err)));
               await openDocument(page);
               await page.waitForTimeout(30000);
-              const mobile = await page.evaluate(() => {
-                const frame = document.querySelector('iframe[name="frameEditor"]') || document.querySelector('iframe');
-                const win = frame?.contentWindow;
+              const state = await page.evaluate(() => {
+                const frame = document.querySelector('iframe[name="frameEditor"]');
                 const doc = frame?.contentDocument;
-                const api = win?.DE?.getController?.('Toolbar')?.api || win?.DE?.getController?.('Main')?.api || win?.Asc?.editor || null;
-                const bodyText = (doc?.body?.innerText || '').replace(/\s+/g, ' ').slice(0, 1000);
-                const apiFlags = {};
-                if (api) {
-                  for (const key of ['isDocumentLoadComplete','isDocumentLoaded','DocumentLoadComplete','bInit_word_control','isLoadFullApi']) {
-                    try { apiFlags[key] = typeof api[key] === 'function' ? api[key]() : api[key]; } catch (e) { apiFlags[key] = String(e); }
-                  }
-                }
-                return {
-                  frameUrl: frame?.src || '',
-                  bodyText,
-                  hasLoadingText: bodyText.includes('Cargando documento'),
-                  hasApi: !!api,
-                  apiFlags,
-                  innerWidth: win?.innerWidth,
-                  userAgent: win?.navigator?.userAgent,
-                };
+                const text = (doc?.body?.innerText || '').replace(/\s+/g, ' ');
+                return { text: text.slice(0,800), loading: text.includes('Cargando documento'), hasCanvas: !!doc?.querySelector('canvas') };
               });
-              console.log('IPHONE_WEBKIT=' + JSON.stringify({ mobile, consoleErrors, pageErrors }, null, 2));
+              console.log('IPHONE_WEBKIT=' + JSON.stringify({ state, pageErrors }, null, 2));
+              assert.ok(!pageErrors.some(x => x.includes('requestIdleCallback')), 'requestIdleCallback sigue fallando');
+              assert.equal(state.loading, false, 'ONLYOFFICE sigue atascado en Cargando documento');
+              assert.ok(state.hasCanvas, 'No se creó el canvas del documento');
               await browser.close();
             }
-          })().catch(error => {
-            console.error(error);
-            process.exit(1);
-          });
+          })().catch(error => { console.error(error); process.exit(1); });
           NODE
