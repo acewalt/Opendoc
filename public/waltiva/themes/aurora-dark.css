@@ -1,276 +1,203 @@
 /*
  * Waltiva — Aurora Dark
- * Custom visual layer for the embedded ONLYOFFICE editor.
+ * Enhancement layer for the native ONLYOFFICE theme `theme-aurora-dark`.
  *
- * Architecture rule: every override is scoped behind data-waltiva-theme.
- * The editor logic and the built-in ONLYOFFICE themes remain untouched.
+ * IMPORTANT: theme selection is handled by ONLYOFFICE itself through
+ * /themes.json. This file only adds Waltiva-specific gradients, glass and
+ * softer geometry after the native theme has been selected.
  */
 
-html[data-waltiva-theme='aurora-dark'] {
+html[data-waltiva-theme='aurora-dark'],
+body.theme-aurora-dark {
   color-scheme: dark;
 
-  /* Waltiva semantic tokens */
   --waltiva-aurora-bg-0: #15131f;
   --waltiva-aurora-bg-1: #1d1a2a;
   --waltiva-aurora-bg-2: #262238;
-  --waltiva-aurora-panel: rgba(39, 35, 57, 0.9);
-  --waltiva-aurora-panel-soft: rgba(47, 42, 69, 0.76);
+  --waltiva-aurora-panel: rgba(39, 35, 57, 0.92);
+  --waltiva-aurora-panel-soft: rgba(48, 43, 69, 0.78);
   --waltiva-aurora-panel-strong: rgba(52, 47, 76, 0.96);
-  --waltiva-aurora-line: rgba(196, 187, 255, 0.13);
-  --waltiva-aurora-line-strong: rgba(204, 197, 255, 0.25);
+  --waltiva-aurora-line: rgba(202, 194, 255, 0.14);
+  --waltiva-aurora-line-strong: rgba(205, 198, 255, 0.26);
   --waltiva-aurora-text: #efecfa;
-  --waltiva-aurora-text-muted: #bbb5cb;
-  --waltiva-aurora-text-soft: #868095;
+  --waltiva-aurora-muted: #bbb5cb;
   --waltiva-aurora-accent: #9284ef;
-  --waltiva-aurora-accent-hover: #a396fa;
   --waltiva-aurora-accent-blue: #7388e7;
-  --waltiva-aurora-hover: rgba(162, 149, 247, 0.13);
-  --waltiva-aurora-pressed: rgba(143, 128, 234, 0.27);
-  --waltiva-aurora-glow: rgba(115, 95, 218, 0.2);
-  --waltiva-aurora-glow-blue: rgba(77, 111, 207, 0.12);
+  --waltiva-aurora-hover: rgba(162, 149, 247, 0.14);
+  --waltiva-aurora-pressed: rgba(143, 128, 234, 0.28);
   --waltiva-aurora-radius-sm: 5px;
   --waltiva-aurora-radius-md: 8px;
   --waltiva-aurora-radius-lg: 11px;
   --waltiva-aurora-blur: 16px;
 }
 
-/*
- * Map the semantic palette onto ONLYOFFICE's existing design tokens.
- * The selector intentionally targets whichever native theme wrapper is
- * currently present, so Aurora Dark stays an overlay instead of forking it.
- */
-html[data-waltiva-theme='aurora-dark'].theme-light,
-html[data-waltiva-theme='aurora-dark'].theme-classic-light,
-html[data-waltiva-theme='aurora-dark'].theme-dark,
-html[data-waltiva-theme='aurora-dark'].theme-contrast-dark,
-html[data-waltiva-theme='aurora-dark'] .theme-light,
-html[data-waltiva-theme='aurora-dark'] .theme-classic-light,
-html[data-waltiva-theme='aurora-dark'] .theme-dark,
-html[data-waltiva-theme='aurora-dark'] .theme-contrast-dark {
-  --toolbar-header-document: #242035;
-  --toolbar-header-spreadsheet: #242035;
-  --toolbar-header-presentation: #242035;
-  --toolbar-header-pdf: #242035;
-
-  --background-normal: #211e2f;
-  --background-toolbar: rgba(36, 32, 52, 0.96);
-  --background-toolbar-additional: rgba(46, 41, 66, 0.92);
-  --background-primary-dialog-button: #8275eb;
-  --background-accent-button: #8275eb;
-  --background-tab-underline: #a89dff;
-  --background-notification-popover: #312c46;
-  --background-notification-badge: #8e80ec;
-  --background-scrim: rgba(9, 7, 16, 0.62);
-  --background-loader: rgba(24, 21, 34, 0.92);
-  --background-contrast-popover: rgba(29, 26, 42, 0.98);
-  --shadow-contrast-popover: rgba(5, 3, 13, 0.5);
-
-  --highlight-button-hover: rgba(162, 149, 247, 0.13);
-  --highlight-button-pressed: rgba(143, 128, 234, 0.27);
-  --highlight-button-pressed-hover: rgba(158, 143, 245, 0.34);
-  --highlight-primary-dialog-button-hover: #978af7;
-  --highlight-accent-button-hover: #978af7;
-  --highlight-accent-button-pressed: #7063d4;
-  --highlight-header-button-hover: rgba(171, 159, 248, 0.14);
-  --highlight-header-button-pressed: rgba(154, 140, 239, 0.25);
-  --highlight-header-tab-underline: #b5aaff;
-  --highlight-text-select: rgba(127, 112, 225, 0.36);
-
-  --border-toolbar: rgba(196, 187, 255, 0.13);
-  --border-toolbar-active-panel-top: rgba(204, 197, 255, 0.2);
-  --border-divider: rgba(196, 187, 255, 0.12);
-  --border-regular-control: rgba(202, 194, 255, 0.19);
-  --border-toolbar-button-hover: rgba(205, 198, 255, 0.24);
-  --border-preview-hover: rgba(175, 162, 255, 0.38);
-  --border-preview-select: #9588f1;
-  --border-control-focus: #9f92f7;
-  --border-color-shading: rgba(194, 184, 255, 0.18);
-  --border-error: #e47d97;
-  --border-contrast-popover: rgba(207, 199, 255, 0.19);
-
-  --text-normal: #efecfa;
-  --text-normal-pressed: #ffffff;
-  --text-secondary: #bbb5cb;
-  --text-tertiary: #868095;
-  --text-link: #b9b1ff;
-  --text-link-hover: #d0caff;
-  --text-link-active: #9b8ff3;
-  --text-inverse: #ffffff;
-  --text-toolbar-header: #f5f2ff;
-
-  --icon-normal: #d7d1e7;
-  --icon-normal-pressed: #ffffff;
-  --icon-inverse: #ffffff;
-  --icon-toolbar-header: #f2effc;
-  --icon-success: #83cfb5;
-
-  --canvas-background: #15131f;
-  --canvas-content-background: #ffffff;
-  --canvas-page-border: rgba(198, 189, 255, 0.2);
-  --canvas-ruler-background: #252138;
-  --canvas-ruler-margins-background: #1c1928;
-  --canvas-ruler-mark: #aaa4bd;
-  --canvas-scroll-thumb: #3b3550;
-  --canvas-scroll-thumb-hover: #544b70;
-  --canvas-scroll-thumb-pressed: #665b89;
-  --canvas-scroll-thumb-border: #29243a;
-  --canvas-scroll-arrow: #918aa5;
-
-  /* Keep dark-compatible icon atlases even when Aurora overlays a light native theme. */
-  --component-normal-icon-filter: invert(100%);
-  --component-normal-icon-filter-offset: -20px;
-  --component-normal-icon-filter-opacity: 0.8;
-  --component-normal-icon-filter-opacity-hover: 1;
-  --component-normal-icon-filter-opacity-active: 1;
-  --image-border-types-filter: invert(100%);
-  --image-border-types-filter-offset: -20px;
-}
-
-/* Base surface and workspace glow */
-html[data-waltiva-theme='aurora-dark'] body,
-html[data-waltiva-theme='aurora-dark'] #viewport {
-  background-color: var(--waltiva-aurora-bg-0);
+/* Workspace: deep blue-violet base with a restrained glow. */
+body.theme-aurora-dark,
+body.theme-aurora-dark #viewport,
+html[data-waltiva-theme='aurora-dark'] body {
+  background-color: var(--waltiva-aurora-bg-0) !important;
   background-image:
-    radial-gradient(circle at 18% -12%, rgba(119, 95, 219, 0.16), transparent 34rem),
-    radial-gradient(circle at 92% 104%, rgba(72, 99, 190, 0.11), transparent 36rem),
-    linear-gradient(145deg, var(--waltiva-aurora-bg-0) 0%, #191624 46%, #171521 100%);
+    radial-gradient(circle at 18% -12%, rgba(119, 95, 219, 0.17), transparent 34rem),
+    radial-gradient(circle at 92% 104%, rgba(72, 99, 190, 0.12), transparent 36rem),
+    linear-gradient(145deg, #15131f 0%, #1a1725 48%, #16141f 100%) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] #editor-container {
-  background-color: var(--waltiva-aurora-bg-0);
+/* The document itself remains neutral/white; only the surrounding canvas glows. */
+body.theme-aurora-dark #editor-container,
+body.theme-aurora-dark .canvas-outer,
+body.theme-aurora-dark .canvas-scroll-wrap {
+  background-color: var(--waltiva-aurora-bg-0) !important;
   background-image:
-    radial-gradient(circle at 52% 18%, var(--waltiva-aurora-glow) 0%, transparent 38%),
-    radial-gradient(circle at 88% 88%, var(--waltiva-aurora-glow-blue) 0%, transparent 34%),
-    linear-gradient(150deg, #171421 0%, #1b1827 48%, #15131f 100%);
+    radial-gradient(circle at 50% 18%, rgba(115, 95, 218, 0.16), transparent 38%),
+    radial-gradient(circle at 88% 88%, rgba(77, 111, 207, 0.10), transparent 34%),
+    linear-gradient(150deg, #171421 0%, #1b1827 48%, #15131f 100%) !important;
 }
 
-/* Main chrome: one material family, rather than isolated recoloring. */
-html[data-waltiva-theme='aurora-dark'] .toolbar,
-html[data-waltiva-theme='aurora-dark'] .toolbar .more-container,
-html[data-waltiva-theme='aurora-dark'] .toolbar .more-box,
-html[data-waltiva-theme='aurora-dark'] .statusbar,
-html[data-waltiva-theme='aurora-dark'] .tool-menu.right .tool-menu-btns,
-html[data-waltiva-theme='aurora-dark'] .left-menu-full-ct,
-html[data-waltiva-theme='aurora-dark'] #file-menu-panel .panel-menu {
-  background-color: var(--waltiva-aurora-panel);
+/* Main editor chrome: one material family, not isolated recoloring. */
+body.theme-aurora-dark .toolbar,
+body.theme-aurora-dark .toolbar .more-container,
+body.theme-aurora-dark .toolbar .more-box,
+body.theme-aurora-dark .statusbar,
+body.theme-aurora-dark .tool-menu.right .tool-menu-btns,
+body.theme-aurora-dark .left-menu-full-ct,
+body.theme-aurora-dark #file-menu-panel .panel-menu {
+  background-color: var(--waltiva-aurora-panel) !important;
   background-image: linear-gradient(
     135deg,
-    rgba(55, 49, 79, 0.58) 0%,
-    rgba(35, 31, 51, 0.86) 58%,
-    rgba(31, 28, 45, 0.94) 100%
-  );
-  border-color: var(--waltiva-aurora-line);
+    rgba(56, 50, 80, 0.66) 0%,
+    rgba(38, 34, 55, 0.91) 58%,
+    rgba(31, 28, 45, 0.97) 100%
+  ) !important;
+  border-color: var(--waltiva-aurora-line) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] .toolbar {
+body.theme-aurora-dark .toolbar {
   box-shadow:
-    inset 0 -1px 0 rgba(209, 201, 255, 0.05),
-    0 7px 24px rgba(4, 3, 12, 0.13);
+    inset 0 -1px 0 rgba(219, 211, 255, 0.05),
+    0 8px 26px rgba(4, 3, 12, 0.14);
 }
 
-html[data-waltiva-theme='aurora-dark'] .toolbar .tabs {
-  background-color: #242035;
-  background-image: linear-gradient(105deg, #2b2540 0%, #242035 46%, #211e30 100%);
-  border-color: var(--waltiva-aurora-line);
+body.theme-aurora-dark .toolbar .tabs {
+  background-color: #242035 !important;
+  background-image: linear-gradient(105deg, #2d2742 0%, #242035 48%, #211e30 100%) !important;
+  border-color: var(--waltiva-aurora-line) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] .toolbar .tabs > li,
-html[data-waltiva-theme='aurora-dark'] .toolbar .tabs > li > a {
+body.theme-aurora-dark .toolbar .tabs > li,
+body.theme-aurora-dark .toolbar .tabs > li > a {
   border-radius: var(--waltiva-aurora-radius-sm) var(--waltiva-aurora-radius-sm) 0 0;
 }
 
-html[data-waltiva-theme='aurora-dark'] .toolbar .tabs > li.active > a {
-  background: linear-gradient(180deg, rgba(156, 141, 242, 0.14), rgba(98, 86, 160, 0.07));
+body.theme-aurora-dark .toolbar .tabs > li.active > a {
+  background-image: linear-gradient(
+    180deg,
+    rgba(164, 149, 248, 0.15),
+    rgba(98, 86, 160, 0.06)
+  ) !important;
 }
 
-/* Integrated sidebars */
-html[data-waltiva-theme='aurora-dark'] .left-panel,
-html[data-waltiva-theme='aurora-dark'] .right-panel {
-  background-color: rgba(31, 28, 45, 0.9);
-  background-image: linear-gradient(180deg, rgba(48, 43, 68, 0.62), rgba(29, 26, 42, 0.9));
-  border-color: var(--waltiva-aurora-line);
+/* Sidebars are part of the same surface instead of looking pasted on. */
+body.theme-aurora-dark .left-panel,
+body.theme-aurora-dark .right-panel,
+body.theme-aurora-dark .panel-left,
+body.theme-aurora-dark .panel-right {
+  background-color: rgba(31, 28, 45, 0.92) !important;
+  background-image: linear-gradient(
+    180deg,
+    rgba(49, 44, 70, 0.64),
+    rgba(29, 26, 42, 0.93)
+  ) !important;
+  border-color: var(--waltiva-aurora-line) !important;
   box-shadow: inset 0 0 0 1px rgba(224, 219, 255, 0.018);
 }
 
-/* Floating surfaces / glass */
-html[data-waltiva-theme='aurora-dark'] .dropdown-menu,
-html[data-waltiva-theme='aurora-dark'] .asc-window,
-html[data-waltiva-theme='aurora-dark'] .tooltip-inner,
-html[data-waltiva-theme='aurora-dark'] .popover,
-html[data-waltiva-theme='aurora-dark'] .menu-shape,
-html[data-waltiva-theme='aurora-dark'] .context-menu {
-  background-color: rgba(31, 28, 45, 0.94);
-  background-image: linear-gradient(145deg, rgba(54, 49, 76, 0.72), rgba(29, 26, 42, 0.95));
-  border-color: var(--waltiva-aurora-line-strong);
-  border-radius: var(--waltiva-aurora-radius-md);
+/* Floating UI / glass surfaces. */
+body.theme-aurora-dark .dropdown-menu,
+body.theme-aurora-dark .asc-window,
+body.theme-aurora-dark .popover,
+body.theme-aurora-dark .tooltip-inner,
+body.theme-aurora-dark .menu-shape,
+body.theme-aurora-dark .context-menu {
+  background-color: rgba(31, 28, 45, 0.96) !important;
+  background-image: linear-gradient(
+    145deg,
+    rgba(57, 51, 81, 0.77),
+    rgba(29, 26, 42, 0.97)
+  ) !important;
+  border-color: var(--waltiva-aurora-line-strong) !important;
+  border-radius: var(--waltiva-aurora-radius-md) !important;
   box-shadow:
-    0 14px 34px rgba(5, 3, 14, 0.36),
-    inset 0 1px 0 rgba(236, 231, 255, 0.045);
+    0 14px 34px rgba(5, 3, 14, 0.38),
+    inset 0 1px 0 rgba(236, 231, 255, 0.05) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] .dropdown-menu > li > a,
-html[data-waltiva-theme='aurora-dark'] .dropdown-menu > li > button {
-  border-radius: var(--waltiva-aurora-radius-sm);
+body.theme-aurora-dark .dropdown-menu > li > a,
+body.theme-aurora-dark .dropdown-menu > li > button {
+  border-radius: var(--waltiva-aurora-radius-sm) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] .dropdown-menu > li > a:hover,
-html[data-waltiva-theme='aurora-dark'] .dropdown-menu > li > a:focus,
-html[data-waltiva-theme='aurora-dark'] .dropdown-menu > li.active > a {
-  background-color: var(--waltiva-aurora-hover);
+body.theme-aurora-dark .dropdown-menu > li > a:hover,
+body.theme-aurora-dark .dropdown-menu > li > a:focus,
+body.theme-aurora-dark .dropdown-menu > li.active > a {
+  background-color: var(--waltiva-aurora-hover) !important;
 }
 
-/* Controls use the same softer geometry and contrast. */
-html[data-waltiva-theme='aurora-dark'] .btn,
-html[data-waltiva-theme='aurora-dark'] .form-control,
-html[data-waltiva-theme='aurora-dark'] .input-group-addon,
-html[data-waltiva-theme='aurora-dark'] .combo-dataview,
-html[data-waltiva-theme='aurora-dark'] .combo-box,
-html[data-waltiva-theme='aurora-dark'] .spinner {
-  border-radius: var(--waltiva-aurora-radius-sm);
+/* Controls: softer corners and quieter contrast. */
+body.theme-aurora-dark .btn,
+body.theme-aurora-dark .form-control,
+body.theme-aurora-dark .input-group-addon,
+body.theme-aurora-dark .combo-dataview,
+body.theme-aurora-dark .combo-box,
+body.theme-aurora-dark .spinner {
+  border-radius: var(--waltiva-aurora-radius-sm) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] .btn:hover,
-html[data-waltiva-theme='aurora-dark'] .toolbar button:hover {
-  border-color: var(--waltiva-aurora-line-strong);
+body.theme-aurora-dark .btn:hover,
+body.theme-aurora-dark .toolbar button:hover {
+  border-color: var(--waltiva-aurora-line-strong) !important;
 }
 
-html[data-waltiva-theme='aurora-dark'] .btn-primary,
-html[data-waltiva-theme='aurora-dark'] .btn-accent {
-  background-image: linear-gradient(135deg, var(--waltiva-aurora-accent), var(--waltiva-aurora-accent-blue));
-  border-color: rgba(190, 180, 255, 0.34);
-  box-shadow: 0 5px 16px rgba(99, 82, 192, 0.2);
+body.theme-aurora-dark .btn-primary,
+body.theme-aurora-dark .btn-accent {
+  background-color: var(--waltiva-aurora-accent) !important;
+  background-image: linear-gradient(
+    135deg,
+    var(--waltiva-aurora-accent),
+    var(--waltiva-aurora-accent-blue)
+  ) !important;
+  border-color: rgba(190, 180, 255, 0.34) !important;
+  box-shadow: 0 5px 16px rgba(99, 82, 192, 0.20);
 }
 
-/* Make the custom theme entry feel native in the ONLYOFFICE menu. */
-html[data-waltiva-theme='aurora-dark'] [data-waltiva-theme-option='aurora-dark'] > a,
-html[data-waltiva-theme='aurora-dark'] [data-waltiva-theme-option='aurora-dark'] > button {
+/* Native Aurora theme option/checkmark stays fully owned by ONLYOFFICE. */
+body.theme-aurora-dark .dropdown-menu .checked,
+body.theme-aurora-dark .dropdown-menu [aria-checked='true'] {
   color: var(--waltiva-aurora-text);
 }
 
-html[data-waltiva-theme='aurora-dark'] [data-waltiva-theme-option='aurora-dark'] > a.checked,
-html[data-waltiva-theme='aurora-dark'] [data-waltiva-theme-option='aurora-dark'].checked > a {
-  background-color: rgba(147, 132, 239, 0.13);
-}
-
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  html[data-waltiva-theme='aurora-dark'] .dropdown-menu,
-  html[data-waltiva-theme='aurora-dark'] .asc-window,
-  html[data-waltiva-theme='aurora-dark'] .popover,
-  html[data-waltiva-theme='aurora-dark'] .left-panel,
-  html[data-waltiva-theme='aurora-dark'] .right-panel {
+  body.theme-aurora-dark .dropdown-menu,
+  body.theme-aurora-dark .asc-window,
+  body.theme-aurora-dark .popover,
+  body.theme-aurora-dark .left-panel,
+  body.theme-aurora-dark .right-panel,
+  body.theme-aurora-dark .panel-left,
+  body.theme-aurora-dark .panel-right {
     -webkit-backdrop-filter: blur(var(--waltiva-aurora-blur)) saturate(122%);
     backdrop-filter: blur(var(--waltiva-aurora-blur)) saturate(122%);
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  html[data-waltiva-theme='aurora-dark'] .dropdown-menu,
-  html[data-waltiva-theme='aurora-dark'] .asc-window,
-  html[data-waltiva-theme='aurora-dark'] .popover,
-  html[data-waltiva-theme='aurora-dark'] .left-panel,
-  html[data-waltiva-theme='aurora-dark'] .right-panel {
+  body.theme-aurora-dark .dropdown-menu,
+  body.theme-aurora-dark .asc-window,
+  body.theme-aurora-dark .popover,
+  body.theme-aurora-dark .left-panel,
+  body.theme-aurora-dark .right-panel,
+  body.theme-aurora-dark .panel-left,
+  body.theme-aurora-dark .panel-right {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    background-color: #211e2f;
+    background-color: #211e2f !important;
   }
 }
