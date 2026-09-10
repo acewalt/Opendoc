@@ -61,21 +61,49 @@ jobs:
           test -f html/v9.3.0.24-1/web-apps/apps/api/documents/api.js
           test -f html/v9.3.0.24-1/web-apps/apps/documenteditor/main/index.html
           test -f html/v9.3.0.24-1/web-apps/apps/spreadsheeteditor/main/index.html
+          test -f html/v9.3.0.24-1/web-apps/apps/spreadsheeteditor/main/index_internal.html
           test -f html/v9.3.0.24-1/web-apps/apps/presentationeditor/main/index.html
+
+      - name: Patch ONLYOFFICE internal editor paths for local hosting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          api = Path('html/v9.3.0.24-1/web-apps/apps/api/documents/api.js')
+          text = api.read_text(encoding='utf-8')
+
+          # ONLYOFFICE server builds insert a server-side revision directory when
+          # an internally-created editor (chart/OLE/mail-merge) does not carry
+          # isLocalFile=true. Waltiva serves the whole v9.3.0.24-1 tree directly,
+          # so that synthetic directory must not be inserted.
+          old = "if ( !config.isLocalFile ) {\n            const ver = '/9.3.0-90621fd167d8090903a61c79b926eb27';"
+          new = "if ( !config.isLocalFile && path.indexOf('/v9.3.0.24-1/') < 0 ) {\n            const ver = '/9.3.0-90621fd167d8090903a61c79b926eb27';"
+
+          if old not in text:
+              raise SystemExit('No se encontró el bloque extendAppPath esperado en api.js')
+
+          api.write_text(text.replace(old, new, 1), encoding='utf-8')
+          print('api.js: rutas internas adaptadas al hosting local/subpath')
+          PY
 
       - name: Install Chromium for runtime smoke test
         run: npx playwright install --with-deps chromium
 
-      - name: Smoke test DOCX XLSX PPTX in Spanish
+      - name: Smoke test DOCX XLSX PPTX and chart editor under GitHub Pages subpath
         run: |
-          python3 -m http.server 4173 --directory html >/tmp/waltiva-http.log 2>&1 &
+          rm -rf /tmp/waltiva-smoke-site
+          mkdir -p /tmp/waltiva-smoke-site/Waltiva/onlyoffice-preview
+          cp -a html/. /tmp/waltiva-smoke-site/Waltiva/onlyoffice-preview/
+
+          python3 -m http.server 4173 --directory /tmp/waltiva-smoke-site >/tmp/waltiva-http.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID || true' EXIT
           for i in {1..30}; do
-            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            if curl -fsS http://127.0.0.1:4173/Waltiva/onlyoffice-preview/ >/dev/null; then break; fi
             sleep 1
           done
-          node scripts/smoke-office.mjs
+
+          WALTIVA_SMOKE_URL='http://127.0.0.1:4173/Waltiva/onlyoffice-preview/' node scripts/smoke-office.mjs
 
       - name: Checkout current Pages branch
         uses: actions/checkout@v4
@@ -96,6 +124,7 @@ jobs:
           Editor wrapper: wasm-onlyoffice-sdk 0.1.4
           ONLYOFFICE runtime: 9.3 scaffold from oonxt/wasm-onlyoffice-demo
           Local converter: x2t WebAssembly
+          Internal editor paths patched for static/subpath hosting
           Original prototype reference: sweetwisdom/onlyoffice-web-local
           License: GNU AGPL-3.0-or-later
           TXT
@@ -106,5 +135,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A onlyoffice-preview
-          git commit -m 'Actualizar Waltiva a ONLYOFFICE 9.3 en español' || exit 0
+          git commit -m 'Corregir editor interno de gráficos en Waltiva' || exit 0
           git push origin main
