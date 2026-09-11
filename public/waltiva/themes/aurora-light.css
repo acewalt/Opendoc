@@ -1,0 +1,496 @@
+/*
+ * Waltiva — Aurora Light
+ * ------------------------------------------------------------
+ * Light counterpart to Aurora Dark. It intentionally reuses Aurora's layout,
+ * radii, spacing and interaction model; this file only remaps the visual
+ * material to the neutral white/light-grey palette of the supplied reference.
+ *
+ * Aurora Light keeps the `theme-aurora-dark` geometry class for compatibility
+ * with the existing Aurora layers and adds `theme-aurora-light` as the final
+ * colour override. The double-class selectors below therefore outrank the
+ * dark skin without duplicating behavioural code.
+ */
+
+html[data-waltiva-theme='aurora-light'],
+body.theme-aurora-dark.theme-aurora-light {
+  color-scheme: light !important;
+
+  /* ONLYOFFICE palette */
+  --toolbar-header-document: #f7f7f7 !important;
+  --toolbar-header-spreadsheet: #f7f7f7 !important;
+  --toolbar-header-presentation: #f7f7f7 !important;
+  --toolbar-header-pdf: #f7f7f7 !important;
+  --toolbar-header-visio: #f7f7f7 !important;
+
+  --background-normal: #f7f7f7 !important;
+  --background-toolbar: #f7f7f7 !important;
+  --background-toolbar-additional: #efefef !important;
+  --background-primary-dialog-button: #e2e2e2 !important;
+  --background-accent-button: #e2e2e2 !important;
+  --background-tab-underline: #7b6a9d !important;
+  --background-notification-popover: #ffffff !important;
+  --background-notification-badge: #7b6a9d !important;
+  --background-scrim: rgba(55, 55, 55, .22) !important;
+  --background-loader: #f3f3f3 !important;
+  --background-contrast-popover: #ffffff !important;
+
+  --highlight-button-hover: #e9e9e9 !important;
+  --highlight-button-pressed: #dedede !important;
+  --highlight-button-pressed-hover: #d7d7d7 !important;
+  --highlight-primary-dialog-button-hover: #d9d9d9 !important;
+  --highlight-accent-button-hover: #d9d9d9 !important;
+  --highlight-accent-button-pressed: #cecece !important;
+  --highlight-header-button-hover: #ededed !important;
+  --highlight-header-button-pressed: #e1e1e1 !important;
+  --highlight-header-tab-underline: #75638f !important;
+  --highlight-toolbar-tab-underline-document: #75638f !important;
+  --highlight-toolbar-tab-underline-spreadsheet: #75638f !important;
+  --highlight-toolbar-tab-underline-presentation: #75638f !important;
+  --highlight-toolbar-tab-underline-pdf: #75638f !important;
+  --highlight-toolbar-tab-underline-visio: #75638f !important;
+  --highlight-text-select: rgba(120, 102, 153, .22) !important;
+
+  --border-toolbar: #dfdfdf !important;
+  --border-toolbar-active-panel-top: #d8d8d8 !important;
+  --border-divider: #e0e0e0 !important;
+  --border-regular-control: #d4d4d4 !important;
+  --border-toolbar-button-hover: #d2d2d2 !important;
+  --border-preview-hover: #b9b0c7 !important;
+  --border-preview-select: #85739e !important;
+  --border-control-focus: #8b78a6 !important;
+  --border-color-shading: #dadada !important;
+  --border-error: #d85a62 !important;
+  --border-contrast-popover: #d9d9d9 !important;
+
+  --text-normal: #2f2f2f !important;
+  --text-normal-pressed: #202020 !important;
+  --text-secondary: #6d6d6d !important;
+  --text-tertiary: #9a9a9a !important;
+  --text-link: #66557f !important;
+  --text-link-hover: #4e3d69 !important;
+  --text-link-active: #7a6991 !important;
+  --text-inverse: #ffffff !important;
+  --text-toolbar-header: #2e2e2e !important;
+  --icon-normal: #606060 !important;
+  --icon-normal-pressed: #343434 !important;
+  --icon-inverse: #ffffff !important;
+  --icon-toolbar-header: #555555 !important;
+  --icon-success: #5b876f !important;
+
+  --canvas-background: #efefef !important;
+  --canvas-content-background: #ffffff !important;
+  --canvas-page-border: #d4d4d4 !important;
+  --canvas-ruler-background: #f7f7f7 !important;
+  --canvas-ruler-border: #dfdfdf !important;
+  --canvas-ruler-margins-background: #efefef !important;
+  --canvas-ruler-mark: #777777 !important;
+  --canvas-ruler-handle-border: #777777 !important;
+  --canvas-ruler-handle-border-disabled: #b9b9b9 !important;
+  --canvas-scroll-thumb: #c8c8c8 !important;
+  --canvas-scroll-thumb-hover: #b8b8b8 !important;
+  --canvas-scroll-thumb-pressed: #a9a9a9 !important;
+  --canvas-scroll-thumb-border: #ededed !important;
+  --canvas-scroll-thumb-border-hover: #e4e4e4 !important;
+  --canvas-scroll-thumb-border-pressed: #dcdcdc !important;
+  --canvas-scroll-arrow: #777777 !important;
+
+  /* Aurora material aliases */
+  --aurora-shell-0: #efefef !important;
+  --aurora-shell-1: #f7f7f7 !important;
+  --aurora-shell-2: #f0f0f0 !important;
+  --aurora-ribbon-0: #ffffff !important;
+  --aurora-ribbon-1: #f7f7f7 !important;
+  --aurora-ribbon-2: #efefef !important;
+  --aurora-panel-0: #f7f7f7 !important;
+  --aurora-panel-1: #f3f3f3 !important;
+  --aurora-panel-2: #ededed !important;
+  --aurora-purple: #7b6a9d !important;
+  --aurora-purple-2: #67577f !important;
+  --aurora-blue: #72839f !important;
+  --aurora-line: rgba(55, 55, 55, .11) !important;
+  --aurora-line-strong: rgba(55, 55, 55, .18) !important;
+  --aurora-glow-purple: rgba(123, 106, 157, .07) !important;
+  --aurora-glow-blue: rgba(114, 131, 159, .05) !important;
+  --aurora-shadow-lg: 0 14px 34px rgba(28, 28, 28, .12) !important;
+  --aurora-shadow-md: 0 7px 18px rgba(28, 28, 28, .10) !important;
+  --aurora-shadow-sm: 0 3px 10px rgba(28, 28, 28, .08) !important;
+
+  /* Scrollbar aliases from Aurora's dedicated layer */
+  --aurora-scroll-track: #efefef !important;
+  --aurora-scroll-track-soft: rgba(120, 120, 120, .07) !important;
+  --aurora-scroll-thumb: #c7c7c7 !important;
+  --aurora-scroll-thumb-hover: #b7b7b7 !important;
+  --aurora-scroll-thumb-active: #a8a8a8 !important;
+  --aurora-scroll-edge: rgba(75, 75, 75, .08) !important;
+}
+
+/* ============================================================
+   SHELL / WORKSPACE
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light,
+body.theme-aurora-dark.theme-aurora-light #viewport,
+body.theme-aurora-dark.theme-aurora-light #editor-container {
+  color: #2f2f2f !important;
+  background-color: #efefef !important;
+  background-image:
+    radial-gradient(ellipse 72% 52% at 4% 0%, rgba(255,255,255,.78), transparent 67%),
+    linear-gradient(124deg, #f4f4f4 0%, #f0f0f0 45%, #ededed 100%) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #editor_sdk,
+body.theme-aurora-dark.theme-aurora-light #editor_sdk > div {
+  background-color: #efefef !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #viewport .layout-region,
+body.theme-aurora-dark.theme-aurora-light #viewport .layout-region > tbody,
+body.theme-aurora-dark.theme-aurora-light #viewport .layout-region > tbody > tr,
+body.theme-aurora-dark.theme-aurora-light #viewport .layout-region > tbody > tr > td {
+  background-color: transparent !important;
+}
+
+/* ============================================================
+   TITLE BAR / TOP TABS
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light #app-title,
+body.theme-aurora-dark.theme-aurora-light #box-document-title,
+body.theme-aurora-dark.theme-aurora-light #box-document-title > *,
+body.theme-aurora-dark.theme-aurora-light #id-box-doc-name,
+body.theme-aurora-dark.theme-aurora-light #box-doc-name,
+body.theme-aurora-dark.theme-aurora-light .hedset {
+  color: #2f2f2f !important;
+  background: #f7f7f7 !important;
+  border-color: #dfdfdf !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #app-title,
+body.theme-aurora-dark.theme-aurora-light #box-document-title {
+  box-shadow: inset 0 -1px 0 #e4e4e4 !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #box-doc-name,
+body.theme-aurora-dark.theme-aurora-light #id-box-doc-name {
+  color: #333333 !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #toolbar,
+body.theme-aurora-dark.theme-aurora-light .toolbar.editor-native-color,
+body.theme-aurora-dark.theme-aurora-light .toolbar {
+  color: #353535 !important;
+  background: #f7f7f7 !important;
+  border-color: #dfdfdf !important;
+  box-shadow: none !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .box-tabs,
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs,
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs > ul {
+  background: #f7f7f7 !important;
+  border-color: #e2e2e2 !important;
+  box-shadow: inset 0 -1px 0 #e6e6e6 !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs a,
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs button {
+  color: #4b4b4b !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs li:hover > a,
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs li:hover > button {
+  color: #222222 !important;
+  background: #ededed !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs li.active > a,
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs li.active > button,
+body.theme-aurora-dark.theme-aurora-light .toolbar .tabs li.selected > a {
+  color: #222222 !important;
+  background: linear-gradient(180deg, rgba(123,106,157,.08), rgba(123,106,157,.03)) !important;
+  border-color: rgba(123,106,157,.08) !important;
+  box-shadow: inset 0 -2px 0 #7b6a9d !important;
+}
+
+/* ============================================================
+   RIBBON MATERIAL / COMMANDS
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light .toolbar .box-controls {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .box-controls::before {
+  border-color: #dedede !important;
+  background:
+    radial-gradient(ellipse 46% 160% at 7% -50%, rgba(255,255,255,.96), transparent 72%),
+    linear-gradient(103deg, #ffffff 0%, #f8f8f8 36%, #f3f3f3 70%, #efefef 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 2px 7px rgba(40,40,40,.045) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .box-panels,
+body.theme-aurora-dark.theme-aurora-light .toolbar .panel,
+body.theme-aurora-dark.theme-aurora-light .toolbar .panel.active,
+body.theme-aurora-dark.theme-aurora-light .toolbar .group,
+body.theme-aurora-dark.theme-aurora-light .toolbar .btn-group {
+  background: transparent !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .group,
+body.theme-aurora-dark.theme-aurora-light .toolbar .group + .group {
+  border-color: #e1e1e1 !important;
+  box-shadow: -1px 0 0 rgba(60,60,60,.07) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .btn,
+body.theme-aurora-dark.theme-aurora-light .toolbar button,
+body.theme-aurora-dark.theme-aurora-light .toolbar [role='button'],
+body.theme-aurora-dark.theme-aurora-light .toolbar [id^='tlbtn-'],
+body.theme-aurora-dark.theme-aurora-light .toolbar [id^='tlbtn-'] > .btn,
+body.theme-aurora-dark.theme-aurora-light .toolbar [id^='tlbtn-'] > button,
+body.theme-aurora-dark.theme-aurora-light .toolbar [id^='tlbtn-'] > .dropdown-toggle {
+  color: #4a4a4a !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .btn:hover:not(.disabled),
+body.theme-aurora-dark.theme-aurora-light .toolbar button:hover:not(.disabled),
+body.theme-aurora-dark.theme-aurora-light .toolbar [role='button']:hover:not(.disabled),
+body.theme-aurora-dark.theme-aurora-light .toolbar [id^='tlbtn-']:hover:not(.disabled),
+body.theme-aurora-dark.theme-aurora-light .toolbar [id^='tlbtn-'] > .btn:hover:not(.disabled) {
+  background-color: #e9e9e9 !important;
+  border-color: #dddddd !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .btn.active,
+body.theme-aurora-dark.theme-aurora-light .toolbar .btn.pressed,
+body.theme-aurora-dark.theme-aurora-light .toolbar button.active,
+body.theme-aurora-dark.theme-aurora-light .toolbar [aria-pressed='true'] {
+  background-color: #dedede !important;
+  border-color: #d2d2d2 !important;
+  box-shadow: inset 0 0 0 1px rgba(70,70,70,.04) !important;
+}
+
+/* Real fields remain visually distinct from command tiles. */
+body.theme-aurora-dark.theme-aurora-light .toolbar .form-control,
+body.theme-aurora-dark.theme-aurora-light .toolbar .combo-box,
+body.theme-aurora-dark.theme-aurora-light .toolbar .combo-dataview:not(.combo-styles),
+body.theme-aurora-dark.theme-aurora-light .toolbar .spinner,
+body.theme-aurora-dark.theme-aurora-light .toolbar .input-group,
+body.theme-aurora-dark.theme-aurora-light .toolbar .dropdown-toggle,
+body.theme-aurora-dark.theme-aurora-light input,
+body.theme-aurora-dark.theme-aurora-light textarea,
+body.theme-aurora-dark.theme-aurora-light select {
+  color: #333333 !important;
+  background: #ffffff !important;
+  border-color: #d5d5d5 !important;
+  box-shadow: inset 0 1px 0 rgba(0,0,0,.015) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .toolbar .form-control:focus,
+body.theme-aurora-dark.theme-aurora-light .toolbar .combo-box:focus,
+body.theme-aurora-dark.theme-aurora-light .toolbar .spinner:focus-within,
+body.theme-aurora-dark.theme-aurora-light input:focus,
+body.theme-aurora-dark.theme-aurora-light textarea:focus {
+  border-color: #8b78a6 !important;
+  box-shadow: 0 0 0 2px rgba(123,106,157,.10) !important;
+}
+
+/* ============================================================
+   PANELS / SEARCH / PROPERTIES
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light #left-panel,
+body.theme-aurora-dark.theme-aurora-light .left-panel,
+body.theme-aurora-dark.theme-aurora-light #search-panel,
+body.theme-aurora-dark.theme-aurora-light .search-panel,
+body.theme-aurora-dark.theme-aurora-light #view-left-menu > .left-panel > [id^='left-panel-'] {
+  color: #353535 !important;
+  background-color: #f7f7f7 !important;
+  background-image: linear-gradient(180deg, #fbfbfb 0%, #f7f7f7 48%, #f3f3f3 100%) !important;
+  border-color: #dfdfdf !important;
+  box-shadow: inset -1px 0 rgba(55,55,55,.055) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #left-menu,
+body.theme-aurora-dark.theme-aurora-light .left-menu {
+  background-color: #f0f0f0 !important;
+  background-image: linear-gradient(180deg, #f6f6f6 0%, #f0f0f0 100%) !important;
+  border-right-color: #dfdfdf !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #right-panel,
+body.theme-aurora-dark.theme-aurora-light .right-panel,
+body.theme-aurora-dark.theme-aurora-light #right-settings-panel,
+body.theme-aurora-dark.theme-aurora-light .right-settings-panel {
+  color: #383838 !important;
+  background-color: #f7f7f7 !important;
+  background-image: linear-gradient(180deg, #fbfbfb 0%, #f7f7f7 56%, #f2f2f2 100%) !important;
+  border-color: #dfdfdf !important;
+  box-shadow: inset 1px 0 rgba(55,55,55,.05) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #right-menu,
+body.theme-aurora-dark.theme-aurora-light .right-menu {
+  background-color: #f0f0f0 !important;
+  background-image: linear-gradient(180deg, #f6f6f6 0%, #f0f0f0 100%) !important;
+  border-left-color: #dfdfdf !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #view-left-menu > .left-panel > [id^='left-panel-'],
+body.theme-aurora-dark.theme-aurora-light #view-left-menu > .left-panel > [id^='left-panel-'] > div,
+body.theme-aurora-dark.theme-aurora-light #view-left-menu > .left-panel > [id^='left-panel-'] .content,
+body.theme-aurora-dark.theme-aurora-light #view-left-menu > .left-panel > [id^='left-panel-'] .body {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+/* ============================================================
+   RULERS / STATUS BAR
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light #id_hor_ruler,
+body.theme-aurora-dark.theme-aurora-light #id_vert_ruler,
+body.theme-aurora-dark.theme-aurora-light .ruler,
+body.theme-aurora-dark.theme-aurora-light .hor-ruler,
+body.theme-aurora-dark.theme-aurora-light .vert-ruler,
+body.theme-aurora-dark.theme-aurora-light #ruler-hor,
+body.theme-aurora-dark.theme-aurora-light #ruler-ver {
+  background-color: #f7f7f7 !important;
+  border-color: #dfdfdf !important;
+  box-shadow: none !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #id_hor_ruler .margin,
+body.theme-aurora-dark.theme-aurora-light #id_vert_ruler .margin,
+body.theme-aurora-dark.theme-aurora-light .ruler .margin,
+body.theme-aurora-dark.theme-aurora-light .ruler .margins {
+  background-color: #efefef !important;
+  border-color: #dedede !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light #statusbar,
+body.theme-aurora-dark.theme-aurora-light .statusbar,
+body.theme-aurora-dark.theme-aurora-light #status-bar,
+body.theme-aurora-dark.theme-aurora-light .status-bar {
+  color: #666666 !important;
+  background: #f7f7f7 !important;
+  border-color: #dfdfdf !important;
+}
+
+/* ============================================================
+   MENUS / POPOVERS / DIALOGS
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu,
+body.theme-aurora-dark.theme-aurora-light .menu,
+body.theme-aurora-dark.theme-aurora-light .popover,
+body.theme-aurora-dark.theme-aurora-light .context-menu,
+body.theme-aurora-dark.theme-aurora-light .modal-content,
+body.theme-aurora-dark.theme-aurora-light .asc-window,
+body.theme-aurora-dark.theme-aurora-light .window,
+body.theme-aurora-dark.theme-aurora-light .dialog {
+  color: #333333 !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: #d8d8d8 !important;
+  box-shadow: 0 9px 26px rgba(35,35,35,.13) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu > li > a,
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu > li > button,
+body.theme-aurora-dark.theme-aurora-light .menu-item,
+body.theme-aurora-dark.theme-aurora-light [role='menuitem'] {
+  color: #373737 !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu > li > a:hover,
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu > li > button:hover,
+body.theme-aurora-dark.theme-aurora-light .menu-item:hover,
+body.theme-aurora-dark.theme-aurora-light [role='menuitem']:hover {
+  background-color: #eeeeee !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu .checked > a,
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu a.checked,
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu .selected > a,
+body.theme-aurora-dark.theme-aurora-light .dropdown-menu .active > a {
+  background-color: rgba(123,106,157,.10) !important;
+  color: #3e334f !important;
+}
+
+/* Style gallery remains paper-like in both Aurora variants. */
+body.theme-aurora-dark.theme-aurora-light #slot-field-styles .item,
+body.theme-aurora-dark.theme-aurora-light #slot-field-styles .dataview-item,
+body.theme-aurora-dark.theme-aurora-light .combo-styles .item,
+body.theme-aurora-dark.theme-aurora-light .combo-styles .dataview-item {
+  color: #2f2f2f !important;
+  background: linear-gradient(180deg, #ffffff, #f7f7f7) !important;
+  border-color: #d8d8d8 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.08) !important;
+}
+
+/* ============================================================
+   SCROLLBARS
+   ============================================================ */
+body.theme-aurora-dark.theme-aurora-light,
+body.theme-aurora-dark.theme-aurora-light * {
+  scrollbar-color: #c7c7c7 #efefef;
+}
+
+body.theme-aurora-dark.theme-aurora-light ::-webkit-scrollbar-track {
+  background: #efefef !important;
+  box-shadow: inset 1px 0 0 rgba(70,70,70,.07) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light ::-webkit-scrollbar-thumb {
+  background: #c7c7c7 !important;
+  border-color: #efefef !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light ::-webkit-scrollbar-thumb:hover {
+  background: #b7b7b7 !important;
+  border-color: #efefef !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light ::-webkit-scrollbar-thumb:active {
+  background: #a8a8a8 !important;
+  border-color: #efefef !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light ::-webkit-scrollbar-corner {
+  background: #efefef !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-y-rail,
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-x-rail {
+  background-color: rgba(100,100,100,.055) !important;
+  border-color: rgba(70,70,70,.07) !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-y-rail .ps-scrollbar-y,
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-x-rail .ps-scrollbar-x {
+  background-color: #c7c7c7 !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-y-rail:hover .ps-scrollbar-y,
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-x-rail:hover .ps-scrollbar-x {
+  background-color: #b7b7b7 !important;
+}
+
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-y-rail:active .ps-scrollbar-y,
+body.theme-aurora-dark.theme-aurora-light .ps-container.oo .ps-scrollbar-x-rail:active .ps-scrollbar-x {
+  background-color: #a8a8a8 !important;
+}
+
+/* Disabled content stays readable but quiet on the light material. */
+body.theme-aurora-dark.theme-aurora-light .disabled,
+body.theme-aurora-dark.theme-aurora-light [disabled],
+body.theme-aurora-dark.theme-aurora-light [aria-disabled='true'] {
+  color: #aaaaaa !important;
+}
