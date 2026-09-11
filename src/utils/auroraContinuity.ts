@@ -8,6 +8,7 @@ const FRAME_SELECTOR = [
   'iframe[name="frameEditor"]',
   '#iframe iframe',
   'iframe[src*="/web-apps/apps/documenteditor/"]',
+  'iframe[src*="/web-apps/apps/spreadsheeteditor/"]',
 ].join(', ')
 
 const CONTINUITY_LINK_ID = 'waltiva-aurora-continuity-styles'
@@ -17,6 +18,7 @@ const TOOLBAR_BUTTONS_LINK_ID = 'waltiva-aurora-toolbar-buttons-styles'
 const PANEL_CORNERS_LINK_ID = 'waltiva-aurora-panel-corners-styles'
 const LIGHT_OVERRIDE_LINK_ID = 'waltiva-aurora-light-styles'
 const LIGHT_FINAL_LINK_ID = 'waltiva-aurora-light-final-styles'
+const SPREADSHEET_LINK_ID = 'waltiva-aurora-spreadsheet-styles'
 const CUSTOM_OPTION_ATTRIBUTE = 'data-waltiva-theme-option'
 
 const AURORA_DARK: WaltivaThemeId = 'aurora-dark'
@@ -36,6 +38,14 @@ const syncingNativeBase = new WeakSet<Document>()
 
 function getStylesheetUrl(path: string): string {
   return new URL(path, document.baseURI).href
+}
+
+function isSpreadsheetDocument(doc: Document): boolean {
+  try {
+    return doc.location.pathname.includes('/web-apps/apps/spreadsheeteditor/')
+  } catch {
+    return false
+  }
 }
 
 function ensureStylesheet(
@@ -197,6 +207,14 @@ function installStylesheets(doc: Document): boolean {
     './waltiva/themes/aurora-light-final.css?v=1',
     true,
   )
+  const spreadsheetReady = isSpreadsheetDocument(doc)
+    ? ensureStylesheet(
+        doc,
+        SPREADSHEET_LINK_ID,
+        './waltiva/themes/aurora-spreadsheet.css?v=1',
+        true,
+      )
+    : true
 
   return (
     continuityReady &&
@@ -205,7 +223,8 @@ function installStylesheets(doc: Document): boolean {
     toolbarButtonsReady &&
     panelCornersReady &&
     lightOverrideReady &&
-    lightFinalReady
+    lightFinalReady &&
+    spreadsheetReady
   )
 }
 
@@ -213,14 +232,25 @@ function syncDocument(doc: Document): void {
   installStylesheets(doc)
   syncNativeThemeBase(doc)
 
-  // Native theme changes may append their own stylesheet after ours. Promote
-  // the final Aurora Light correction layer back to the end of <head>.
+  // Native theme changes may append their own stylesheets after ours. Promote
+  // Aurora's final correction layers back to the end of <head>. Spreadsheet
+  // goes after Aurora Light because its canvas background/grid tokens are
+  // editor-specific and must win over the Writer-style perimeter colours.
   ensureStylesheet(
     doc,
     LIGHT_FINAL_LINK_ID,
     './waltiva/themes/aurora-light-final.css?v=1',
     true,
   )
+
+  if (isSpreadsheetDocument(doc)) {
+    ensureStylesheet(
+      doc,
+      SPREADSHEET_LINK_ID,
+      './waltiva/themes/aurora-spreadsheet.css?v=1',
+      true,
+    )
+  }
 }
 
 function scheduleDocumentSync(doc: Document): void {
@@ -293,8 +323,9 @@ function scan(): void {
 /**
  * Loads Waltiva's Aurora visual layers inside ONLYOFFICE's same-origin iframe.
  * Both Aurora variants share the same geometry. Aurora Light gets a dedicated
- * final material layer and a deterministic native Light base, so its appearance
- * no longer depends on which ONLYOFFICE theme was selected immediately before.
+ * final material layer and a deterministic native Light base. Spreadsheet also
+ * gets its own canvas palette because cell/grid colours are separate from the
+ * document-editor canvas variables used by Writer/PDF.
  */
 export function initAuroraContinuityLayer(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
