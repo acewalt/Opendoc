@@ -1,0 +1,71 @@
+name: Inspect Aurora DOM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-aurora-dom.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Survey ONLYOFFICE DOM under Aurora
+        shell: bash
+        run: |
+          pnpm exec vite preview --host 127.0.0.1 --port 4177 >/tmp/aurora-dom-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID || true' EXIT
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4177/ >/dev/null && break; sleep 1; done
+          node <<'NODE'
+          const { chromium } = require('@playwright/test');
+          (async () => {
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage({viewport:{width:1538,height:912}});
+            await page.goto('http://127.0.0.1:4177/#/', {waitUntil:'networkidle'});
+            await page.getByText('Crear documento',{exact:true}).click();
+            await page.getByText('Documento',{exact:true}).click();
+            await page.waitForFunction(() => {
+              const f=document.querySelector('iframe[name="frameEditor"],#iframe iframe');
+              return !!f?.contentDocument?.querySelector('[data-waltiva-theme-option="aurora-dark"]') && !!f?.contentDocument?.querySelector('canvas');
+            },null,{timeout:120000});
+            await page.evaluate(() => {
+              const d=document.querySelector('iframe[name="frameEditor"],#iframe iframe').contentDocument;
+              const i=d.querySelector('[data-waltiva-theme-option="aurora-dark"]');
+              (i.querySelector('a,button,[role="menuitem"]')||i).click();
+            });
+            await page.waitForTimeout(500);
+            const survey=await page.evaluate(() => {
+              const d=document.querySelector('iframe[name="frameEditor"],#iframe iframe').contentDocument;
+              const w=d.defaultView;
+              const selectors=['#header','.toolbar','.toolbar .tabs','.toolbar .group','.statusbar','.left-panel','.right-panel','.panel-left','.panel-right','#left-menu','#right-menu','.tool-menu','.tool-menu.right','.layout-region','.layout-region-center','.layout-region-east','.layout-region-west','.comments-panel','.right-panel .content-panel','.left-panel .content-panel','#viewport','#editor-container','#editor_sdk'];
+              const out={};
+              for(const s of selectors){
+                const els=[...d.querySelectorAll(s)].slice(0,8);
+                out[s]=els.map(el=>{
+                  const r=el.getBoundingClientRect(); const c=w.getComputedStyle(el);
+                  return {tag:el.tagName,id:el.id,cls:el.className,width:Math.round(r.width),height:Math.round(r.height),x:Math.round(r.x),y:Math.round(r.y),display:c.display,bg:c.backgroundColor,bgi:c.backgroundImage,border:c.borderColor,radius:c.borderRadius,position:c.position};
+                });
+              }
+              const visible=[...d.querySelectorAll('body *')].filter(el=>{
+                const r=el.getBoundingClientRect(); const c=w.getComputedStyle(el);
+                return r.width>120&&r.height>24&&r.height<900&&c.display!=='none'&&c.visibility!=='hidden';
+              }).slice(0,180).map(el=>({tag:el.tagName,id:el.id,cls:typeof el.className==='string'?el.className:'',w:Math.round(el.getBoundingClientRect().width),h:Math.round(el.getBoundingClientRect().height)}));
+              return {out,visible};
+            });
+            console.log('AURORA_DOM_SURVEY='+JSON.stringify(survey));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
