@@ -1,0 +1,165 @@
+/*
+ * Waltiva — Aurora spreadsheet canvas
+ *
+ * ONLYOFFICE Spreadsheet draws the worksheet grid on canvas and reads a
+ * separate family of CSS variables from the Writer/PDF canvas tokens. Without
+ * these variables Aurora can inherit low-contrast values from the native theme,
+ * making the worksheet look like one flat rectangle. Keep this file loaded
+ * after the shared Aurora layers so both custom themes have deterministic cell,
+ * header, selection and grid colours.
+ */
+
+/* ============================================================
+   AURORA DARK — spreadsheet canvas
+   ============================================================ */
+html[data-waltiva-theme='aurora-dark'],
+body.theme-aurora-dark:not(.theme-aurora-light) {
+  --canvas-background: #292d36 !important;
+  --canvas-content-background: #292d36 !important;
+
+  --canvas-cell-border: #414750 !important;
+  --canvas-cell-border-hover: #59616c !important;
+  --canvas-cell-border-selection: #75aa86 !important;
+  --canvas-cell-border-selection-adjacent: rgba(117, 170, 134, 0.72) !important;
+  --canvas-cell-border-header: #484f59 !important;
+  --canvas-cell-border-header-hover: #5a626d !important;
+  --canvas-cell-border-header-active: #66746c !important;
+  --canvas-cell-fill-header: #343943 !important;
+  --canvas-cell-fill-header-hover: #3f4650 !important;
+  --canvas-cell-fill-header-active: #424c47 !important;
+  --canvas-cell-text: #d9dde3 !important;
+  --canvas-cell-text-filter: #b6bcc5 !important;
+  --canvas-cell-text-filter-active: #ffffff !important;
+  --canvas-cursor-cell: #d2d6dc !important;
+  --canvas-cursor-cell-fill: #292d36 !important;
+  --canvas-cursor-cell-inv: #292d36 !important;
+  --canvas-cursor-cell-inv-fill: #d2d6dc !important;
+  --canvas-high-contrast: #f4f5f6 !important;
+  --canvas-select-all-icon: #aeb4bd !important;
+
+  --canvas-sheet-view-cell-background: rgba(103, 165, 124, 0.16) !important;
+  --canvas-sheet-view-cell-background-pressed: rgba(103, 165, 124, 0.29) !important;
+  --canvas-sheet-view-cell-title-label: #e0e7e2 !important;
+  --canvas-sheet-view-select-all-icon: #8bc39c !important;
+  --canvas-filter-popover-background: #343943 !important;
+  --canvas-selection-contrast: #eef2f0 !important;
+  --canvas-selection-selection: #eef2f0 !important;
+  --canvas-selection-border-cell: #59616c !important;
+  --canvas-selection-border-range: #69737d !important;
+
+  /* Defensive dark aliases. Spreadsheet's renderer can query these directly
+     even while ONLYOFFICE is between native-theme repaint frames. */
+  --canvas-cell-border-dark: #414750 !important;
+  --canvas-cell-border-hover-dark: #59616c !important;
+  --canvas-cell-border-selection-dark: #75aa86 !important;
+  --canvas-cell-border-selection-adjacent-dark: rgba(117, 170, 134, 0.72) !important;
+  --canvas-cell-border-header-dark: #484f59 !important;
+  --canvas-cell-border-header-hover-dark: #5a626d !important;
+  --canvas-cell-border-header-active-dark: #66746c !important;
+  --canvas-cell-fill-header-dark: #343943 !important;
+  --canvas-cell-fill-header-hover-dark: #3f4650 !important;
+  --canvas-cell-fill-header-active-dark: #424c47 !important;
+  --canvas-cell-text-dark: #d9dde3 !important;
+  --canvas-cell-text-filter-dark: #b6bcc5 !important;
+  --canvas-cell-text-filter-active-dark: #ffffff !important;
+  --canvas-cursor-cell-dark: #d2d6dc !important;
+  --canvas-cursor-cell-fill-dark: #292d36 !important;
+  --canvas-cursor-cell-inv-dark: #292d36 !important;
+  --canvas-cursor-cell-inv-fill-dark: #d2d6dc !important;
+  --canvas-high-contrast-dark: #f4f5f6 !important;
+  --canvas-select-all-icon-dark: #aeb4bd !important;
+  --canvas-sheet-view-cell-background-dark: rgba(103, 165, 124, 0.16) !important;
+  --canvas-sheet-view-cell-background-pressed-dark: rgba(103, 165, 124, 0.29) !important;
+  --canvas-sheet-view-cell-title-label-dark: #e0e7e2 !important;
+  --canvas-sheet-view-select-all-icon-dark: #8bc39c !important;
+  --canvas-filter-popover-background-dark: #343943 !important;
+  --canvas-selection-selection-dark: #eef2f0 !important;
+  --canvas-selection-border-cell-dark: #59616c !important;
+}
+
+/* ============================================================
+   AURORA LIGHT — spreadsheet canvas
+   ============================================================ */
+html[data-waltiva-theme='aurora-light'],
+body.theme-aurora-dark.theme-aurora-light {
+  /* A spreadsheet has no paper/outside-paper split. The entire worksheet is
+     the content surface, so Aurora Light must use white here instead of the
+     light-grey Writer perimeter colour. */
+  --canvas-background: #ffffff !important;
+  --canvas-content-background: #ffffff !important;
+
+  --canvas-cell-border: #d9dde1 !important;
+  --canvas-cell-border-hover: #bdc4ca !important;
+  --canvas-cell-border-selection: #4f8f67 !important;
+  --canvas-cell-border-selection-adjacent: rgba(79, 143, 103, 0.68) !important;
+  --canvas-cell-border-header: #d4d8dc !important;
+  --canvas-cell-border-header-hover: #c2c8ce !important;
+  --canvas-cell-border-header-active: #a2b6a8 !important;
+  --canvas-cell-fill-header: #f3f4f5 !important;
+  --canvas-cell-fill-header-hover: #e8ebed !important;
+  --canvas-cell-fill-header-active: #e2ebe5 !important;
+  --canvas-cell-text: #34383d !important;
+  --canvas-cell-text-filter: #687078 !important;
+  --canvas-cell-text-filter-active: #ffffff !important;
+  --canvas-cursor-cell: #606870 !important;
+  --canvas-cursor-cell-fill: #ffffff !important;
+  --canvas-cursor-cell-inv: #ffffff !important;
+  --canvas-cursor-cell-inv-fill: #606870 !important;
+  --canvas-high-contrast: #202428 !important;
+  --canvas-select-all-icon: #7c848b !important;
+
+  --canvas-sheet-view-cell-background: #ecf6ef !important;
+  --canvas-sheet-view-cell-background-pressed: #dceee2 !important;
+  --canvas-sheet-view-cell-title-label: #254f32 !important;
+  --canvas-sheet-view-select-all-icon: #4f8f67 !important;
+  --canvas-filter-popover-background: #ffffff !important;
+  --canvas-selection-contrast: #202428 !important;
+  --canvas-selection-selection: #202428 !important;
+  --canvas-selection-border-cell: #c4c9ce !important;
+  --canvas-selection-border-range: #aeb6bd !important;
+
+  /* Force the light values through any stale native-dark renderer branch. */
+  --canvas-cell-border-dark: #d9dde1 !important;
+  --canvas-cell-border-hover-dark: #bdc4ca !important;
+  --canvas-cell-border-selection-dark: #4f8f67 !important;
+  --canvas-cell-border-selection-adjacent-dark: rgba(79, 143, 103, 0.68) !important;
+  --canvas-cell-border-header-dark: #d4d8dc !important;
+  --canvas-cell-border-header-hover-dark: #c2c8ce !important;
+  --canvas-cell-border-header-active-dark: #a2b6a8 !important;
+  --canvas-cell-fill-header-dark: #f3f4f5 !important;
+  --canvas-cell-fill-header-hover-dark: #e8ebed !important;
+  --canvas-cell-fill-header-active-dark: #e2ebe5 !important;
+  --canvas-cell-text-dark: #34383d !important;
+  --canvas-cell-text-filter-dark: #687078 !important;
+  --canvas-cell-text-filter-active-dark: #ffffff !important;
+  --canvas-cursor-cell-dark: #606870 !important;
+  --canvas-cursor-cell-fill-dark: #ffffff !important;
+  --canvas-cursor-cell-inv-dark: #ffffff !important;
+  --canvas-cursor-cell-inv-fill-dark: #606870 !important;
+  --canvas-high-contrast-dark: #202428 !important;
+  --canvas-select-all-icon-dark: #7c848b !important;
+  --canvas-sheet-view-cell-background-dark: #ecf6ef !important;
+  --canvas-sheet-view-cell-background-pressed-dark: #dceee2 !important;
+  --canvas-sheet-view-cell-title-label-dark: #254f32 !important;
+  --canvas-sheet-view-select-all-icon-dark: #4f8f67 !important;
+  --canvas-filter-popover-background-dark: #ffffff !important;
+  --canvas-selection-selection-dark: #202428 !important;
+  --canvas-selection-border-cell-dark: #c4c9ce !important;
+}
+
+/* Keep the formula/name area and sheet-tab strip part of the Aurora material.
+   The actual worksheet is canvas-rendered; these are the surrounding DOM
+   surfaces that otherwise keep native-theme leftovers after a live switch. */
+html[data-waltiva-theme='aurora-dark'] #formula-bar,
+html[data-waltiva-theme='aurora-dark'] #statusbar,
+body.theme-aurora-dark:not(.theme-aurora-light) #formula-bar,
+body.theme-aurora-dark:not(.theme-aurora-light) #statusbar {
+  border-color: rgba(218, 222, 230, 0.08) !important;
+}
+
+html[data-waltiva-theme='aurora-light'] #formula-bar,
+html[data-waltiva-theme='aurora-light'] #statusbar,
+body.theme-aurora-dark.theme-aurora-light #formula-bar,
+body.theme-aurora-dark.theme-aurora-light #statusbar {
+  border-color: #dedede !important;
+}
