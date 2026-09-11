@@ -1,0 +1,64 @@
+name: Capture Aurora preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/capture-aurora-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Capture Aurora
+        shell: bash
+        run: |
+          pnpm exec vite preview --host 127.0.0.1 --port 4178 >/tmp/aurora-preview.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID || true' EXIT
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4178/ >/dev/null && break; sleep 1; done
+          node <<'NODE'
+          const { chromium } = require('@playwright/test');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1538,height:912}});
+            await page.goto('http://127.0.0.1:4178/#/',{waitUntil:'networkidle'});
+            await page.getByText('Crear documento',{exact:true}).click();
+            await page.getByText('Documento',{exact:true}).click();
+            await page.waitForFunction(()=>{
+              const f=document.querySelector('iframe[name="frameEditor"],#iframe iframe');
+              return !!f?.contentDocument?.querySelector('[data-waltiva-theme-option="aurora-dark"]')&&!!f?.contentDocument?.querySelector('canvas');
+            },null,{timeout:120000});
+            await page.evaluate(()=>{
+              const d=document.querySelector('iframe[name="frameEditor"],#iframe iframe').contentDocument;
+              const i=d.querySelector('[data-waltiva-theme-option="aurora-dark"]');
+              (i.querySelector('a,button,[role="menuitem"]')||i).click();
+            });
+            await page.waitForTimeout(700);
+            await page.screenshot({path:'.github/aurora-preview.png',fullPage:false});
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Commit temporary screenshot
+        shell: bash
+        run: |
+          git config user.name "Waltiva CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/aurora-preview.png
+          git commit -m "chore: capture Aurora preview"
+          git push
