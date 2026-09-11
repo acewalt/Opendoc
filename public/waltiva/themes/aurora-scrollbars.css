@@ -1,0 +1,129 @@
+/*
+ * Waltiva — Aurora Dark / scrollbar finish
+ * ------------------------------------------------------------
+ * Keeps ONLYOFFICE scrollbars visually aligned with Waltiva's Aurora shell:
+ * narrow graphite rails, low-contrast tracks and a restrained lavender-grey
+ * thumb. Visual only; scrolling behaviour and hit targets remain native.
+ */
+
+html[data-waltiva-theme='aurora-dark'],
+body.theme-aurora-dark {
+  --aurora-scroll-track: #242831;
+  --aurora-scroll-track-soft: rgba(16, 18, 24, .22);
+  --aurora-scroll-thumb: #555865;
+  --aurora-scroll-thumb-hover: #666977;
+  --aurora-scroll-thumb-active: #777989;
+  --aurora-scroll-edge: rgba(222, 217, 235, .06);
+
+  /* ONLYOFFICE canvas scrollbar tokens. */
+  --canvas-scroll-thumb: #515460 !important;
+  --canvas-scroll-thumb-hover: #656875 !important;
+  --canvas-scroll-thumb-pressed: #767988 !important;
+  --canvas-scroll-thumb-border: #252933 !important;
+  --canvas-scroll-thumb-border-hover: #353a46 !important;
+  --canvas-scroll-thumb-border-pressed: #424754 !important;
+  --canvas-scroll-arrow: #9496a1 !important;
+}
+
+/* Firefox / standards-based scrollbar styling. */
+html[data-waltiva-theme='aurora-dark'],
+html[data-waltiva-theme='aurora-dark'] *,
+body.theme-aurora-dark,
+body.theme-aurora-dark * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--aurora-scroll-thumb) var(--aurora-scroll-track);
+}
+
+/* Chromium / WebKit native scrollbars. */
+html[data-waltiva-theme='aurora-dark'] ::-webkit-scrollbar,
+body.theme-aurora-dark ::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+html[data-waltiva-theme='aurora-dark'] ::-webkit-scrollbar-track,
+body.theme-aurora-dark ::-webkit-scrollbar-track {
+  background: var(--aurora-scroll-track);
+  box-shadow: inset 1px 0 0 var(--aurora-scroll-edge);
+}
+
+html[data-waltiva-theme='aurora-dark'] ::-webkit-scrollbar-thumb,
+body.theme-aurora-dark ::-webkit-scrollbar-thumb {
+  min-width: 28px;
+  min-height: 28px;
+  background: var(--aurora-scroll-thumb);
+  border: 2px solid var(--aurora-scroll-track);
+  border-radius: 5px;
+  background-clip: padding-box;
+}
+
+html[data-waltiva-theme='aurora-dark'] ::-webkit-scrollbar-thumb:hover,
+body.theme-aurora-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--aurora-scroll-thumb-hover);
+  border: 2px solid var(--aurora-scroll-track);
+  background-clip: padding-box;
+}
+
+html[data-waltiva-theme='aurora-dark'] ::-webkit-scrollbar-thumb:active,
+body.theme-aurora-dark ::-webkit-scrollbar-thumb:active {
+  background: var(--aurora-scroll-thumb-active);
+  border: 2px solid var(--aurora-scroll-track);
+  background-clip: padding-box;
+}
+
+html[data-waltiva-theme='aurora-dark'] ::-webkit-scrollbar-corner,
+body.theme-aurora-dark ::-webkit-scrollbar-corner {
+  background: var(--aurora-scroll-track);
+}
+
+/* ONLYOFFICE panels use PerfectScrollbar. Match the same visual language
+   without changing the rail's interaction area. */
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-y-rail,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-y-rail {
+  width: 10px !important;
+  background-color: var(--aurora-scroll-track-soft) !important;
+  border-left: 1px solid rgba(222, 217, 235, .035) !important;
+  border-radius: 4px !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-x-rail,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-x-rail {
+  height: 10px !important;
+  background-color: var(--aurora-scroll-track-soft) !important;
+  border-top: 1px solid rgba(222, 217, 235, .035) !important;
+  border-radius: 4px !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-y-rail .ps-scrollbar-y,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-y-rail .ps-scrollbar-y {
+  right: 2px !important;
+  width: 6px !important;
+  min-height: 24px;
+  background-color: var(--aurora-scroll-thumb) !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-x-rail .ps-scrollbar-x,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-x-rail .ps-scrollbar-x {
+  bottom: 2px !important;
+  height: 6px !important;
+  min-width: 24px;
+  background-color: var(--aurora-scroll-thumb) !important;
+  border: 0 !important;
+  border-radius: 3px !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-y-rail:hover .ps-scrollbar-y,
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-x-rail:hover .ps-scrollbar-x,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-y-rail:hover .ps-scrollbar-y,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-x-rail:hover .ps-scrollbar-x {
+  background-color: var(--aurora-scroll-thumb-hover) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-y-rail:active .ps-scrollbar-y,
+html[data-waltiva-theme='aurora-dark'] .ps-container.oo .ps-scrollbar-x-rail:active .ps-scrollbar-x,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-y-rail:active .ps-scrollbar-y,
+body.theme-aurora-dark .ps-container.oo .ps-scrollbar-x-rail:active .ps-scrollbar-x {
+  background-color: var(--aurora-scroll-thumb-active) !important;
+}
