@@ -9,6 +9,7 @@ const CANVAS_SURFACE_LINK_ID = 'waltiva-aurora-canvas-surface-styles'
 const SCROLLBAR_LINK_ID = 'waltiva-aurora-scrollbar-styles'
 const TOOLBAR_BUTTONS_LINK_ID = 'waltiva-aurora-toolbar-buttons-styles'
 const PANEL_CORNERS_LINK_ID = 'waltiva-aurora-panel-corners-styles'
+const LIGHT_OVERRIDE_LINK_ID = 'waltiva-aurora-light-styles'
 const observedFrames = new WeakSet<HTMLIFrameElement>()
 const retryTimers = new WeakMap<HTMLIFrameElement, number>()
 
@@ -64,13 +65,21 @@ function installStylesheets(frame: HTMLIFrameElement): boolean {
       PANEL_CORNERS_LINK_ID,
       './waltiva/themes/aurora-panel-corners.css?v=1',
     )
+    // Keep the light palette last. Aurora Light deliberately reuses every
+    // preceding Aurora geometry rule and only replaces the material colours.
+    const lightOverrideReady = ensureStylesheet(
+      doc,
+      LIGHT_OVERRIDE_LINK_ID,
+      './waltiva/themes/aurora-light.css?v=1',
+    )
 
     return (
       continuityReady &&
       canvasReady &&
       scrollbarReady &&
       toolbarButtonsReady &&
-      panelCornersReady
+      panelCornersReady &&
+      lightOverrideReady
     )
   } catch {
     return false
@@ -108,13 +117,10 @@ function scan(): void {
 }
 
 /**
- * Loads the Aurora Dark visual layers inside ONLYOFFICE's same-origin iframe.
- * The continuity stylesheet carries the general skin, the canvas layer fixes
- * concrete workspace colours, the scrollbar layer keeps scrolling surfaces
- * consistent, the toolbar-button layer flattens native command tiles into the
- * Aurora ribbon, and the panel-corner layer keeps Search/Replace consistent
- * with the rounded left-side panels. All layers are inert unless Aurora Dark
- * is active.
+ * Loads Waltiva's Aurora visual layers inside ONLYOFFICE's same-origin iframe.
+ * Both Aurora variants share the continuity, canvas, scrollbar, toolbar-button
+ * and panel-corner geometry. Aurora Light is loaded last as a colour/material
+ * override, so both variants stay structurally identical.
  */
 export function initAuroraContinuityLayer(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
