@@ -56,7 +56,7 @@ function installStylesheets(frame: HTMLIFrameElement): boolean {
     const toolbarButtonsReady = ensureStylesheet(
       doc,
       TOOLBAR_BUTTONS_LINK_ID,
-      './waltiva/themes/aurora-toolbar-buttons.css?v=1',
+      './waltiva/themes/aurora-toolbar-buttons.css?v=2',
     )
 
     return continuityReady && canvasReady && scrollbarReady && toolbarButtonsReady
