@@ -138,7 +138,7 @@ function ensureAuroraStylesheet(doc: Document): void {
   const link = doc.createElement('link')
   link.id = THEME_STYLESHEET_ID
   link.rel = 'stylesheet'
-  link.href = new URL('./waltiva/themes/aurora-dark.css', document.baseURI).href
+  link.href = new URL('./waltiva/themes/aurora-dark.css?v=4', document.baseURI).href
   doc.head.appendChild(link)
 }
 
