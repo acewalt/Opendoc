@@ -6,6 +6,7 @@ const FRAME_SELECTOR = [
 
 const CONTINUITY_LINK_ID = 'waltiva-aurora-continuity-styles'
 const CANVAS_SURFACE_LINK_ID = 'waltiva-aurora-canvas-surface-styles'
+const SCROLLBAR_LINK_ID = 'waltiva-aurora-scrollbar-styles'
 const observedFrames = new WeakSet<HTMLIFrameElement>()
 const retryTimers = new WeakMap<HTMLIFrameElement, number>()
 
@@ -46,8 +47,13 @@ function installStylesheets(frame: HTMLIFrameElement): boolean {
       CANVAS_SURFACE_LINK_ID,
       './waltiva/themes/aurora-canvas-surface.css?v=1',
     )
+    const scrollbarReady = ensureStylesheet(
+      doc,
+      SCROLLBAR_LINK_ID,
+      './waltiva/themes/aurora-scrollbars.css?v=1',
+    )
 
-    return continuityReady && canvasReady
+    return continuityReady && canvasReady && scrollbarReady
   } catch {
     return false
   }
@@ -85,9 +91,10 @@ function scan(): void {
 
 /**
  * Loads the Aurora Dark visual layers inside ONLYOFFICE's same-origin iframe.
- * The first stylesheet carries the general skin; the second fixes the SDK's
- * concrete canvas/perimeter colors so the workspace cannot fall back to black.
- * Both files are inert unless Aurora Dark is active.
+ * The continuity stylesheet carries the general skin, the canvas layer fixes
+ * the SDK's concrete workspace colours, and the final scrollbar layer keeps
+ * native and PerfectScrollbar surfaces consistent with Aurora. All three are
+ * inert unless Aurora Dark is active.
  */
 export function initAuroraContinuityLayer(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
