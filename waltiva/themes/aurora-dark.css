@@ -1,5 +1,5 @@
 /*
- * Waltiva — Aurora Dark / visual skin v3
+ * Waltiva — Aurora Dark / visual skin v4
  * ------------------------------------------------------------
  * Full visual skin inspired by the supplied modern ONLYOFFICE reference.
  * Visual only: no commands are removed, reordered or functionally changed.
@@ -69,11 +69,11 @@ body.theme-aurora-dark {
   --icon-inverse: #ffffff !important;
   --icon-toolbar-header: #f5f3f7 !important;
 
-  --canvas-background: #252936 !important;
+  --canvas-background: #202327 !important;
   --canvas-content-background: #ffffff !important;
   --canvas-page-border: #434754 !important;
-  --canvas-ruler-background: #3a3c49 !important;
-  --canvas-ruler-margins-background: #2c2e38 !important;
+  --canvas-ruler-background: #393b44 !important;
+  --canvas-ruler-margins-background: #292c31 !important;
   --canvas-ruler-mark: #b9b6c1 !important;
   --canvas-scroll-thumb: #565563 !important;
   --canvas-scroll-thumb-hover: #6c697a !important;
@@ -82,9 +82,9 @@ body.theme-aurora-dark {
   --canvas-scroll-arrow: #aaa6b2 !important;
 
   /* Waltiva material system */
-  --aurora-shell-0: #1f222b;
-  --aurora-shell-1: #252936;
-  --aurora-shell-2: #2a2e3a;
+  --aurora-shell-0: #202327;
+  --aurora-shell-1: #202327;
+  --aurora-shell-2: #2b2e34;
   --aurora-ribbon-0: #5c556a;
   --aurora-ribbon-1: #514b60;
   --aurora-ribbon-2: #44424f;
@@ -117,9 +117,9 @@ body.theme-aurora-dark #editor-container {
   color: var(--text-normal) !important;
   background-color: var(--aurora-shell-1) !important;
   background-image:
-    radial-gradient(1100px 740px at -4% 28%, rgba(136,99,217,.16) 0%, rgba(136,99,217,.075) 26%, rgba(136,99,217,0) 58%),
-    radial-gradient(900px 620px at 104% 70%, rgba(86,107,196,.14) 0%, rgba(86,107,196,.06) 28%, rgba(86,107,196,0) 60%),
-    linear-gradient(180deg, #282c38 0%, #252936 48%, #222631 100%) !important;
+    radial-gradient(800px 740px at -4% 28%, rgba(136,99,217,.07), transparent 58%),
+    radial-gradient(700px 620px at 104% 90%, rgba(110,80,180,.08), transparent 60%),
+    linear-gradient(180deg, #222529, #202327) !important;
 }
 
 body.theme-aurora-dark #editor_sdk,
@@ -239,16 +239,14 @@ body.theme-aurora-dark .toolbar .box-controls::before {
   z-index: -1;
   pointer-events: none;
   inset: 2px 7px 5px;
-  border: 1px solid rgba(235,230,249,.12);
-  border-radius: 12px;
+  border: 1px solid rgba(235,230,249,.06);
+  border-radius: 9px;
   background:
-    radial-gradient(620px 150px at 7% 0%, rgba(178,146,238,.21) 0%, rgba(178,146,238,.08) 35%, transparent 72%),
-    radial-gradient(620px 170px at 89% 115%, rgba(93,110,190,.13) 0%, transparent 62%),
-    linear-gradient(106deg, #5b5469 0%, #504a5f 33%, #484452 67%, #40404c 100%);
+    radial-gradient(620px 150px at 7% 0%, rgba(178,146,238,.10), transparent 72%),
+    linear-gradient(106deg, #565061 0%, #46434f 33%, #383c43 70%, #333840 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.065),
-    inset 0 -1px 0 rgba(0,0,0,.24),
-    0 7px 18px rgba(6,7,12,.22);
+    inset 0 1px 0 rgba(255,255,255,.025),
+    0 3px 10px rgba(6,7,12,.12);
 }
 
 body.theme-aurora-dark .toolbar .box-panels,
@@ -380,19 +378,36 @@ body.theme-aurora-dark ::-webkit-scrollbar-thumb:hover {
 }
 
 /* ============================================================
-   LEFT SIDEBAR / COMMENTS / SEARCH
+   SIDEBAR SHELLS
    ============================================================ */
 body.theme-aurora-dark #left-menu,
-body.theme-aurora-dark .left-panel,
-body.theme-aurora-dark .layout-region-west,
-body.theme-aurora-dark .left-menu {
+body.theme-aurora-dark #right-menu {
+  background: var(--aurora-shell-0) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* The native left-panel includes 40px of padding for the icon rail.
+   Paint its content children, not that shared wrapper. Keep native rail
+   widths and layout offsets so opening/resizing panels still works. */
+body.theme-aurora-dark #view-left-menu > .left-panel {
+  display: flow-root;
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   LEFT SIDEBAR / COMMENTS / SEARCH
+   ============================================================ */
+body.theme-aurora-dark #view-left-menu > .left-panel > [id^='left-panel-'] {
+  height: calc(100% - 12px) !important;
+  margin: 6px 4px 6px 0;
+  border-radius: 8px;
   background:
-    radial-gradient(420px 520px at -8% 4%, rgba(154,116,222,.19), rgba(154,116,222,.07) 34%, transparent 76%),
-    linear-gradient(180deg, #444151 0%, #3a3a47 46%, #32343f 100%) !important;
-  border-right: 1px solid rgba(235,230,246,.09) !important;
-  box-shadow:
-    inset -1px 0 0 rgba(0,0,0,.18),
-    7px 0 22px rgba(7,8,13,.10) !important;
+    radial-gradient(360px 440px at 0% 0%, rgba(164,133,214,.14), transparent 76%),
+    linear-gradient(165deg, #504a5e 0%, #46434f 42%, #3c4247 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(236,231,248,.045);
 }
 
 body.theme-aurora-dark #left-menu .panel,
@@ -422,28 +437,27 @@ body.theme-aurora-dark .search-result-item:hover {
 /* ============================================================
    RIGHT SIDEBAR / PROPERTIES
    ============================================================ */
-body.theme-aurora-dark #right-menu,
-body.theme-aurora-dark .right-panel,
-body.theme-aurora-dark .layout-region-east,
-body.theme-aurora-dark .right-menu {
+/* Trade 4px of native padding on each side for an outside gutter. The
+   controls retain their original content width. Do not add transforms,
+   filters or containment: native dropdowns use viewport coordinates. */
+body.theme-aurora-dark #view-right-menu > .right-panel {
+  width: calc(100% - 48px);
+  height: calc(100% - 12px);
+  margin: 6px 4px;
+  padding: 4px;
+  border: 0 !important;
+  border-radius: 8px;
   background:
-    radial-gradient(520px 620px at 112% 88%, rgba(139,92,213,.23), rgba(139,92,213,.08) 34%, transparent 74%),
-    radial-gradient(350px 420px at 4% 8%, rgba(109,100,180,.11), transparent 68%),
-    linear-gradient(180deg, #44404f 0%, #393946 48%, #30323e 100%) !important;
-  border-left: 1px solid rgba(236,231,248,.09) !important;
-  box-shadow:
-    inset 1px 0 0 rgba(255,255,255,.025),
-    -7px 0 22px rgba(7,8,13,.10) !important;
+    radial-gradient(340px 640px at 110% 100%, rgba(115,74,194,.23), transparent 78%),
+    linear-gradient(175deg, #363b42 0%, #34363f 48%, #363145 100%) !important;
+  box-shadow: inset 0 0 0 1px rgba(236,231,248,.045) !important;
 }
 
-body.theme-aurora-dark #right-menu .panel,
-body.theme-aurora-dark .right-panel .panel,
-body.theme-aurora-dark .settings-panel,
-body.theme-aurora-dark .layout-region-east .panel {
-  background: rgba(255,255,255,.026) !important;
-  border: 1px solid rgba(237,232,249,.055) !important;
-  border-radius: 10px !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.018) !important;
+body.theme-aurora-dark #view-right-menu > .right-panel > .settings-panel {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 body.theme-aurora-dark #right-menu .panel-heading,
@@ -468,20 +482,30 @@ body.theme-aurora-dark .right-panel .combo-box {
 /* ============================================================
    SIDE ICON RAILS
    ============================================================ */
-body.theme-aurora-dark .left-menu .nav-tabs,
-body.theme-aurora-dark .right-menu .nav-tabs,
-body.theme-aurora-dark .layout-region-west .nav-tabs,
-body.theme-aurora-dark .layout-region-east .nav-tabs {
-  background: rgba(26,28,36,.22) !important;
-  border-color: rgba(235,230,246,.06) !important;
+body.theme-aurora-dark #view-left-menu > .tool-menu-btns,
+body.theme-aurora-dark #view-right-menu > .tool-menu-btns {
+  background: var(--aurora-shell-0) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 
-body.theme-aurora-dark .left-menu .nav-tabs > li.active,
-body.theme-aurora-dark .right-menu .nav-tabs > li.active,
-body.theme-aurora-dark .layout-region-west .nav-tabs > li.active,
-body.theme-aurora-dark .layout-region-east .nav-tabs > li.active {
-  background: rgba(160,132,231,.20) !important;
-  box-shadow: inset 2px 0 0 #aa98ff !important;
+body.theme-aurora-dark #viewport-hbox-layout > .layout-resizer {
+  background: var(--aurora-shell-0) !important;
+  border-color: transparent !important;
+}
+
+body.theme-aurora-dark #view-left-menu > .tool-menu-btns > .btn-category,
+body.theme-aurora-dark #view-right-menu > .tool-menu-btns > .btn-category {
+  /* Inset the highlight without shrinking the native hit target. */
+  background-clip: padding-box !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 0 0 5px var(--aurora-shell-0) !important;
+}
+
+body.theme-aurora-dark #view-left-menu > .tool-menu-btns > .btn-category.active,
+body.theme-aurora-dark #view-right-menu > .tool-menu-btns > .btn-category.active {
+  background-color: rgba(170,148,225,.27) !important;
 }
 
 /* ============================================================
@@ -540,8 +564,8 @@ body.theme-aurora-dark .statusbar,
 body.theme-aurora-dark #statusbar {
   color: #e9e5f1 !important;
   background:
-    radial-gradient(500px 120px at 8% 50%, rgba(133,105,215,.10), transparent 72%),
-    linear-gradient(180deg, #373542, #302f3a) !important;
+    radial-gradient(500px 120px at 100% 50%, rgba(133,105,215,.12), transparent 72%),
+    linear-gradient(180deg, #383c43, #33363d) !important;
   border-top: 1px solid rgba(235,230,246,.075) !important;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.018) !important;
 }
