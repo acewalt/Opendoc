@@ -8,6 +8,7 @@ const CONTINUITY_LINK_ID = 'waltiva-aurora-continuity-styles'
 const CANVAS_SURFACE_LINK_ID = 'waltiva-aurora-canvas-surface-styles'
 const SCROLLBAR_LINK_ID = 'waltiva-aurora-scrollbar-styles'
 const TOOLBAR_BUTTONS_LINK_ID = 'waltiva-aurora-toolbar-buttons-styles'
+const PANEL_CORNERS_LINK_ID = 'waltiva-aurora-panel-corners-styles'
 const observedFrames = new WeakSet<HTMLIFrameElement>()
 const retryTimers = new WeakMap<HTMLIFrameElement, number>()
 
@@ -58,8 +59,19 @@ function installStylesheets(frame: HTMLIFrameElement): boolean {
       TOOLBAR_BUTTONS_LINK_ID,
       './waltiva/themes/aurora-toolbar-buttons.css?v=2',
     )
+    const panelCornersReady = ensureStylesheet(
+      doc,
+      PANEL_CORNERS_LINK_ID,
+      './waltiva/themes/aurora-panel-corners.css?v=1',
+    )
 
-    return continuityReady && canvasReady && scrollbarReady && toolbarButtonsReady
+    return (
+      continuityReady &&
+      canvasReady &&
+      scrollbarReady &&
+      toolbarButtonsReady &&
+      panelCornersReady
+    )
   } catch {
     return false
   }
@@ -99,8 +111,10 @@ function scan(): void {
  * Loads the Aurora Dark visual layers inside ONLYOFFICE's same-origin iframe.
  * The continuity stylesheet carries the general skin, the canvas layer fixes
  * concrete workspace colours, the scrollbar layer keeps scrolling surfaces
- * consistent, and the toolbar-button layer flattens native command tiles into
- * the Aurora ribbon. All layers are inert unless Aurora Dark is active.
+ * consistent, the toolbar-button layer flattens native command tiles into the
+ * Aurora ribbon, and the panel-corner layer keeps Search/Replace consistent
+ * with the rounded left-side panels. All layers are inert unless Aurora Dark
+ * is active.
  */
 export function initAuroraContinuityLayer(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
