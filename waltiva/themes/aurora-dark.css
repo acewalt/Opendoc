@@ -505,13 +505,20 @@ body.theme-aurora-dark .tooltip-inner {
 }
 
 @supports ((backdrop-filter: blur(12px)) or (-webkit-backdrop-filter: blur(12px))) {
-  body.theme-aurora-dark .dropdown-menu,
-  body.theme-aurora-dark .menu,
   body.theme-aurora-dark .asc-window,
   body.theme-aurora-dark .popover {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
   }
+}
+
+/* ONLYOFFICE positions nested menus with fixed viewport coordinates.
+   A backdrop filter on an ancestor changes their containing block and adds
+   the parent menu's offset a second time, separating the hover targets. */
+body.theme-aurora-dark .dropdown-menu,
+body.theme-aurora-dark .menu {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 body.theme-aurora-dark .dropdown-menu > li > a,
