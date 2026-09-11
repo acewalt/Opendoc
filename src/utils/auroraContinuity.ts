@@ -114,9 +114,6 @@ function restoreCustomTheme(theme: WaltivaThemeId): void {
     // localStorage may be unavailable in privacy-restricted contexts.
   }
 
-  // waltivaTheme owns the actual custom-theme state. A synthetic storage event
-  // lets it re-apply the custom overlay after ONLYOFFICE has switched its native
-  // base theme, without duplicating that state machine here.
   window.dispatchEvent(
     new StorageEvent('storage', {
       key: WALTIVA_THEME_STORAGE_KEY,
@@ -126,12 +123,19 @@ function restoreCustomTheme(theme: WaltivaThemeId): void {
 }
 
 /**
- * Aurora is an overlay, but ONLYOFFICE's drawing canvas also caches the native
- * theme that was selected before the overlay. That made Aurora Light depend on
- * whether the user came from Light, Dark or Contrast Dark. Normalize the native
- * base once per activation, then restore the Aurora overlay immediately.
+ * Writer/PDF need a matching native ONLYOFFICE base so their canvas assets are
+ * repainted consistently. Spreadsheet is different: forcing a native theme
+ * click there races Waltiva's custom-theme handler and can collapse Aurora
+ * Light back onto the dark native base. Spreadsheet therefore keeps Waltiva's
+ * own active theme and gets its canvas colours from aurora-spreadsheet.css.
  */
 function syncNativeThemeBase(doc: Document): boolean {
+  if (isSpreadsheetDocument(doc)) {
+    syncedNativeBase.delete(doc)
+    syncingNativeBase.delete(doc)
+    return true
+  }
+
   const theme = getActiveAuroraTheme(doc)
 
   if (!theme) {
@@ -148,17 +152,11 @@ function syncNativeThemeBase(doc: Document): boolean {
   syncingNativeBase.add(doc)
   syncedNativeBase.set(doc, theme)
 
-  // Clicking the real ONLYOFFICE option is intentional: the editor repaints
-  // its SDK canvas and swaps the correct icon/theme assets. Waltiva's handler
-  // temporarily clears the custom overlay for this built-in click.
   getItemControl(nativeItem).click()
 
   window.setTimeout(() => {
     restoreCustomTheme(theme)
 
-    // Give ONLYOFFICE one frame to finish any delayed class/theme mutation,
-    // then reassert Aurora once more. This makes the result deterministic even
-    // when the native theme update queues work internally.
     window.requestAnimationFrame(() => {
       restoreCustomTheme(theme)
       syncingNativeBase.delete(doc)
@@ -211,7 +209,7 @@ function installStylesheets(doc: Document): boolean {
     ? ensureStylesheet(
         doc,
         SPREADSHEET_LINK_ID,
-        './waltiva/themes/aurora-spreadsheet.css?v=1',
+        './waltiva/themes/aurora-spreadsheet.css?v=2',
         true,
       )
     : true
@@ -232,10 +230,6 @@ function syncDocument(doc: Document): void {
   installStylesheets(doc)
   syncNativeThemeBase(doc)
 
-  // Native theme changes may append their own stylesheets after ours. Promote
-  // Aurora's final correction layers back to the end of <head>. Spreadsheet
-  // goes after Aurora Light because its canvas background/grid tokens are
-  // editor-specific and must win over the Writer-style perimeter colours.
   ensureStylesheet(
     doc,
     LIGHT_FINAL_LINK_ID,
@@ -247,7 +241,7 @@ function syncDocument(doc: Document): void {
     ensureStylesheet(
       doc,
       SPREADSHEET_LINK_ID,
-      './waltiva/themes/aurora-spreadsheet.css?v=1',
+      './waltiva/themes/aurora-spreadsheet.css?v=2',
       true,
     )
   }
@@ -322,10 +316,8 @@ function scan(): void {
 
 /**
  * Loads Waltiva's Aurora visual layers inside ONLYOFFICE's same-origin iframe.
- * Both Aurora variants share the same geometry. Aurora Light gets a dedicated
- * final material layer and a deterministic native Light base. Spreadsheet also
- * gets its own canvas palette because cell/grid colours are separate from the
- * document-editor canvas variables used by Writer/PDF.
+ * Spreadsheet gets a dedicated canvas palette and deliberately avoids the
+ * native-base click path used by Writer/PDF.
  */
 export function initAuroraContinuityLayer(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
