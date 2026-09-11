@@ -1,0 +1,205 @@
+/*
+ * Waltiva — Aurora Dark canvas/perimeter surface fix
+ *
+ * ONLYOFFICE paints the area outside the page on its own drawing canvas.
+ * A transparent --canvas-background therefore falls back to a visually black
+ * surface instead of revealing the CSS gradient below it. Keep the SDK canvas
+ * on a concrete graphite-violet tone and let the surrounding DOM regions carry
+ * the two radial lights used by the Aurora reference.
+ */
+
+html[data-waltiva-theme='aurora-dark'],
+body.theme-aurora-dark {
+  --canvas-background: #272a35 !important;
+  --canvas-content-background: #ffffff !important;
+  --canvas-page-border: #3a3e4b !important;
+
+  --canvas-ruler-background: #292d38 !important;
+  --canvas-ruler-border: #353a47 !important;
+  --canvas-ruler-margins-background: #252934 !important;
+  --canvas-ruler-mark: #989aaa !important;
+  --canvas-ruler-handle-border: #aaa7b6 !important;
+  --canvas-ruler-handle-border-disabled: #686b78 !important;
+
+  --canvas-scroll-thumb: #505362 !important;
+  --canvas-scroll-thumb-hover: #656878 !important;
+  --canvas-scroll-thumb-pressed: #777a8b !important;
+  --canvas-scroll-thumb-border: #2d303a !important;
+  --canvas-scroll-thumb-border-hover: #4b4f5e !important;
+  --canvas-scroll-thumb-border-pressed: #5b5f6f !important;
+  --canvas-scroll-arrow: #9698a7 !important;
+}
+
+/* -------------------------------------------------------------------------
+   One continuous environment around the document
+   ------------------------------------------------------------------------- */
+
+html[data-waltiva-theme='aurora-dark'] #viewport,
+body.theme-aurora-dark #viewport,
+html[data-waltiva-theme='aurora-dark'] #editor-container,
+body.theme-aurora-dark #editor-container {
+  background-color: #272a35 !important;
+  background-image:
+    radial-gradient(ellipse 72% 54% at 4% 1%, rgba(143, 108, 198, 0.18) 0%, rgba(111, 88, 158, 0.075) 36%, rgba(67, 59, 91, 0.025) 55%, rgba(39, 42, 53, 0) 74%),
+    radial-gradient(ellipse 62% 76% at 98% 100%, rgba(88, 67, 151, 0.16) 0%, rgba(72, 61, 119, 0.07) 38%, rgba(45, 47, 62, 0.018) 58%, rgba(39, 42, 53, 0) 78%),
+    linear-gradient(124deg, #302d3d 0%, #2c2e3a 29%, #282c37 58%, #252a33 80%, #242930 100%) !important;
+}
+
+/* The SDK drawing surface itself must never fall back to black. The document
+   page remains white because ONLYOFFICE paints it with --canvas-content-background. */
+html[data-waltiva-theme='aurora-dark'] #editor_sdk,
+body.theme-aurora-dark #editor_sdk,
+html[data-waltiva-theme='aurora-dark'] #editor_sdk > div,
+body.theme-aurora-dark #editor_sdk > div {
+  background-color: #272a35 !important;
+}
+
+/* Keep layout table/cells transparent so they do not cut the shell into bands. */
+html[data-waltiva-theme='aurora-dark'] #viewport .layout-region,
+html[data-waltiva-theme='aurora-dark'] #viewport .layout-region > tbody,
+html[data-waltiva-theme='aurora-dark'] #viewport .layout-region > tbody > tr,
+html[data-waltiva-theme='aurora-dark'] #viewport .layout-region > tbody > tr > td,
+body.theme-aurora-dark #viewport .layout-region,
+body.theme-aurora-dark #viewport .layout-region > tbody,
+body.theme-aurora-dark #viewport .layout-region > tbody > tr,
+body.theme-aurora-dark #viewport .layout-region > tbody > tr > td {
+  background-color: transparent !important;
+}
+
+/* -------------------------------------------------------------------------
+   Left panel + icon rail: same material, two depths
+   ------------------------------------------------------------------------- */
+
+html[data-waltiva-theme='aurora-dark'] #left-panel,
+html[data-waltiva-theme='aurora-dark'] .left-panel,
+html[data-waltiva-theme='aurora-dark'] #search-panel,
+html[data-waltiva-theme='aurora-dark'] .search-panel,
+body.theme-aurora-dark #left-panel,
+body.theme-aurora-dark .left-panel,
+body.theme-aurora-dark #search-panel,
+body.theme-aurora-dark .search-panel {
+  border-color: rgba(219, 213, 235, 0.075) !important;
+  background-color: #3d404b !important;
+  background-image:
+    radial-gradient(ellipse 120% 58% at 7% 0%, rgba(146, 110, 199, 0.19) 0%, rgba(109, 89, 150, 0.065) 45%, rgba(61, 64, 75, 0) 78%),
+    linear-gradient(180deg, #454452 0%, #40424d 42%, #3a3e48 72%, #373b44 100%) !important;
+  box-shadow: inset -1px 0 rgba(226, 220, 239, 0.045) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] #left-menu,
+html[data-waltiva-theme='aurora-dark'] .left-menu,
+body.theme-aurora-dark #left-menu,
+body.theme-aurora-dark .left-menu {
+  background-color: #292c35 !important;
+  background-image:
+    radial-gradient(ellipse 100% 48% at 20% 2%, rgba(119, 91, 165, 0.15) 0%, rgba(87, 74, 119, 0.045) 48%, transparent 76%),
+    linear-gradient(180deg, #2c2d39 0%, #292d36 45%, #272c34 100%) !important;
+  border-right-color: rgba(219, 213, 235, 0.055) !important;
+}
+
+/* -------------------------------------------------------------------------
+   Right properties panel: graphite on top, broader violet falloff below
+   ------------------------------------------------------------------------- */
+
+html[data-waltiva-theme='aurora-dark'] #right-panel,
+html[data-waltiva-theme='aurora-dark'] .right-panel,
+html[data-waltiva-theme='aurora-dark'] #right-settings-panel,
+html[data-waltiva-theme='aurora-dark'] .right-settings-panel,
+body.theme-aurora-dark #right-panel,
+body.theme-aurora-dark .right-panel,
+body.theme-aurora-dark #right-settings-panel,
+body.theme-aurora-dark .right-settings-panel {
+  border-color: rgba(219, 213, 235, 0.075) !important;
+  background-color: #363944 !important;
+  background-image:
+    radial-gradient(ellipse 150% 108% at 94% 104%, rgba(114, 73, 174, 0.27) 0%, rgba(91, 68, 141, 0.145) 42%, rgba(62, 58, 83, 0.045) 64%, rgba(54, 57, 68, 0) 80%),
+    linear-gradient(180deg, #343741 0%, #343743 32%, #373745 55%, #3d364c 76%, #49355e 100%) !important;
+  box-shadow: inset 1px 0 rgba(226, 220, 239, 0.04) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] #right-menu,
+html[data-waltiva-theme='aurora-dark'] .right-menu,
+body.theme-aurora-dark #right-menu,
+body.theme-aurora-dark .right-menu {
+  background-color: #292d35 !important;
+  background-image:
+    radial-gradient(ellipse 115% 62% at 80% 100%, rgba(91, 62, 142, 0.17) 0%, rgba(72, 59, 111, 0.055) 48%, transparent 76%),
+    linear-gradient(180deg, #2b2e37 0%, #292e36 52%, #2b2a38 100%) !important;
+  border-left-color: rgba(219, 213, 235, 0.05) !important;
+}
+
+/* -------------------------------------------------------------------------
+   Rulers and their edge blocks: stop reading as separate grey rectangles
+   ------------------------------------------------------------------------- */
+
+html[data-waltiva-theme='aurora-dark'] #id_hor_ruler,
+html[data-waltiva-theme='aurora-dark'] #id_vert_ruler,
+html[data-waltiva-theme='aurora-dark'] .ruler,
+html[data-waltiva-theme='aurora-dark'] .hor-ruler,
+html[data-waltiva-theme='aurora-dark'] .vert-ruler,
+html[data-waltiva-theme='aurora-dark'] #ruler-hor,
+html[data-waltiva-theme='aurora-dark'] #ruler-ver,
+body.theme-aurora-dark #id_hor_ruler,
+body.theme-aurora-dark #id_vert_ruler,
+body.theme-aurora-dark .ruler,
+body.theme-aurora-dark .hor-ruler,
+body.theme-aurora-dark .vert-ruler,
+body.theme-aurora-dark #ruler-hor,
+body.theme-aurora-dark #ruler-ver {
+  background-color: #292d38 !important;
+  border-color: rgba(211, 207, 225, 0.065) !important;
+  box-shadow: none !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] #id_hor_ruler .margin,
+html[data-waltiva-theme='aurora-dark'] #id_vert_ruler .margin,
+html[data-waltiva-theme='aurora-dark'] .ruler .margin,
+html[data-waltiva-theme='aurora-dark'] .ruler .margins,
+body.theme-aurora-dark #id_hor_ruler .margin,
+body.theme-aurora-dark #id_vert_ruler .margin,
+body.theme-aurora-dark .ruler .margin,
+body.theme-aurora-dark .ruler .margins {
+  background-color: #252934 !important;
+  border-color: rgba(211, 207, 225, 0.05) !important;
+}
+
+/* Generic edge wrappers around rulers/scrollbars inherit the workspace rather
+   than creating almost-black blocks. Restrict this to the editor area. */
+html[data-waltiva-theme='aurora-dark'] #editor-container .layout-region,
+body.theme-aurora-dark #editor-container .layout-region {
+  border-color: rgba(210, 205, 224, 0.045) !important;
+}
+
+/* -------------------------------------------------------------------------
+   Title/tabs/ribbon: carry the same two-tone light through the top shell
+   ------------------------------------------------------------------------- */
+
+html[data-waltiva-theme='aurora-dark'] #box-document-title,
+body.theme-aurora-dark #box-document-title {
+  background-color: #292b35 !important;
+  background-image:
+    radial-gradient(620px 94px at 4% -35%, rgba(160, 121, 217, 0.21) 0%, rgba(111, 85, 154, 0.075) 48%, transparent 78%),
+    linear-gradient(99deg, #373145 0%, #302f3d 34%, #292d35 68%, #242a30 100%) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .toolbar,
+body.theme-aurora-dark .toolbar {
+  background-color: #30313b !important;
+  background-image:
+    radial-gradient(720px 130px at 3% -15%, rgba(151, 111, 203, 0.15) 0%, rgba(108, 84, 146, 0.048) 52%, transparent 78%),
+    linear-gradient(101deg, #3a3447 0%, #32313e 31%, #2c3037 66%, #272d32 100%) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .toolbar .box-tabs,
+body.theme-aurora-dark .toolbar .box-tabs {
+  background-image:
+    linear-gradient(98deg, rgba(58, 51, 73, 0.96) 0%, rgba(47, 47, 60, 0.96) 42%, rgba(37, 42, 48, 0.98) 100%) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] .toolbar .box-controls::before,
+body.theme-aurora-dark .toolbar .box-controls::before {
+  background:
+    radial-gradient(ellipse 48% 170% at 7% -42%, rgba(179, 139, 230, 0.16) 0%, rgba(143, 112, 189, 0.05) 55%, transparent 79%),
+    radial-gradient(ellipse 38% 190% at 94% 145%, rgba(94, 80, 137, 0.09) 0%, transparent 72%),
+    linear-gradient(103deg, #524b5d 0%, #484451 29%, #3e4149 64%, #373c43 100%) !important;
+}
