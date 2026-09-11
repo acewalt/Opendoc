@@ -7,15 +7,30 @@ export const WALTIVA_THEMES = [
     label: 'Aurora Dark',
     kind: 'custom',
   },
+  {
+    id: 'aurora-light',
+    label: 'Aurora Light',
+    kind: 'custom',
+  },
 ] as const
 
 export type WaltivaThemeId = (typeof WALTIVA_THEMES)[number]['id']
 
 const AURORA_DARK: WaltivaThemeId = 'aurora-dark'
-const AURORA_DARK_LABEL = 'Aurora Dark'
-const THEME_STYLESHEET_ID = 'waltiva-aurora-dark-styles'
+const AURORA_LIGHT: WaltivaThemeId = 'aurora-light'
 const CUSTOM_OPTION_ATTRIBUTE = 'data-waltiva-theme-option'
 const EDITOR_FRAME_SELECTOR = 'iframe[name="frameEditor"], #iframe iframe'
+
+const THEME_STYLESHEETS = [
+  {
+    id: 'waltiva-aurora-dark-styles',
+    path: './waltiva/themes/aurora-dark.css?v=4',
+  },
+  {
+    id: 'waltiva-aurora-light-base-styles',
+    path: './waltiva/themes/aurora-light.css?v=1',
+  },
+] as const
 
 const BUILT_IN_THEME_LABELS = new Set([
   'igual que el sistema',
@@ -32,9 +47,8 @@ const BUILT_IN_THEME_LABELS = new Set([
 ])
 
 const CONTRAST_DARK_LABELS = new Set(['contraste oscuro', 'contrast dark'])
-const AURORA_LABELS = new Set(['aurora dark'])
 
-const AURORA_TOKENS: Record<string, string> = {
+const AURORA_DARK_TOKENS: Record<string, string> = {
   'toolbar-header-document': '#242035',
   'toolbar-header-spreadsheet': '#242035',
   'toolbar-header-presentation': '#242035',
@@ -104,17 +118,104 @@ const AURORA_TOKENS: Record<string, string> = {
   'canvas-scroll-arrow': '#918aa5',
 }
 
+const AURORA_LIGHT_TOKENS: Record<string, string> = {
+  'toolbar-header-document': '#f7f7f7',
+  'toolbar-header-spreadsheet': '#f7f7f7',
+  'toolbar-header-presentation': '#f7f7f7',
+  'toolbar-header-pdf': '#f7f7f7',
+  'toolbar-header-visio': '#f7f7f7',
+  'background-normal': '#f7f7f7',
+  'background-toolbar': '#f7f7f7',
+  'background-toolbar-additional': '#efefef',
+  'background-primary-dialog-button': '#e2e2e2',
+  'background-accent-button': '#e2e2e2',
+  'background-tab-underline': '#7b6a9d',
+  'background-notification-popover': '#ffffff',
+  'background-notification-badge': '#7b6a9d',
+  'background-scrim': 'rgba(55, 55, 55, 0.22)',
+  'background-loader': '#f3f3f3',
+  'background-contrast-popover': '#ffffff',
+  'highlight-button-hover': '#e9e9e9',
+  'highlight-button-pressed': '#dedede',
+  'highlight-button-pressed-hover': '#d7d7d7',
+  'highlight-primary-dialog-button-hover': '#d9d9d9',
+  'highlight-accent-button-hover': '#d9d9d9',
+  'highlight-accent-button-pressed': '#cecece',
+  'highlight-header-button-hover': '#ededed',
+  'highlight-header-button-pressed': '#e1e1e1',
+  'highlight-header-tab-underline': '#75638f',
+  'highlight-toolbar-tab-underline-document': '#75638f',
+  'highlight-toolbar-tab-underline-spreadsheet': '#75638f',
+  'highlight-toolbar-tab-underline-presentation': '#75638f',
+  'highlight-toolbar-tab-underline-pdf': '#75638f',
+  'highlight-toolbar-tab-underline-visio': '#75638f',
+  'highlight-text-select': 'rgba(120, 102, 153, 0.22)',
+  'border-toolbar': '#dfdfdf',
+  'border-toolbar-active-panel-top': '#d8d8d8',
+  'border-divider': '#e0e0e0',
+  'border-regular-control': '#d4d4d4',
+  'border-toolbar-button-hover': '#d2d2d2',
+  'border-preview-hover': '#b9b0c7',
+  'border-preview-select': '#85739e',
+  'border-control-focus': '#8b78a6',
+  'border-color-shading': '#dadada',
+  'border-error': '#d85a62',
+  'border-contrast-popover': '#d9d9d9',
+  'text-normal': '#2f2f2f',
+  'text-normal-pressed': '#202020',
+  'text-secondary': '#6d6d6d',
+  'text-tertiary': '#9a9a9a',
+  'text-link': '#66557f',
+  'text-link-hover': '#4e3d69',
+  'text-link-active': '#7a6991',
+  'text-inverse': '#ffffff',
+  'text-toolbar-header': '#2e2e2e',
+  'icon-normal': '#606060',
+  'icon-normal-pressed': '#343434',
+  'icon-inverse': '#ffffff',
+  'icon-toolbar-header': '#555555',
+  'icon-success': '#5b876f',
+  'canvas-background': '#efefef',
+  'canvas-content-background': '#ffffff',
+  'canvas-page-border': '#d4d4d4',
+  'canvas-ruler-background': '#f7f7f7',
+  'canvas-ruler-margins-background': '#efefef',
+  'canvas-ruler-mark': '#777777',
+  'canvas-scroll-thumb': '#c8c8c8',
+  'canvas-scroll-thumb-hover': '#b8b8b8',
+  'canvas-scroll-thumb-pressed': '#a9a9a9',
+  'canvas-scroll-thumb-border': '#ededed',
+  'canvas-scroll-arrow': '#777777',
+}
+
+const THEME_TOKENS: Record<WaltivaThemeId, Record<string, string>> = {
+  [AURORA_DARK]: AURORA_DARK_TOKENS,
+  [AURORA_LIGHT]: AURORA_LIGHT_TOKENS,
+}
+
+const ALL_CUSTOM_TOKEN_NAMES = Array.from(
+  new Set(Object.values(THEME_TOKENS).flatMap((tokens) => Object.keys(tokens))),
+)
+
 let initialized = false
 
 function normalizeLabel(value: string | null | undefined): string {
   return (value ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase()
 }
 
+const CUSTOM_LABEL_TO_ID = new Map<string, WaltivaThemeId>(
+  WALTIVA_THEMES.map((theme) => [normalizeLabel(theme.label), theme.id]),
+)
+
+function parseTheme(value: string | null | undefined): WaltivaThemeId | null {
+  return WALTIVA_THEMES.some((theme) => theme.id === value)
+    ? (value as WaltivaThemeId)
+    : null
+}
+
 function readStoredTheme(): WaltivaThemeId | null {
   try {
-    return window.localStorage.getItem(WALTIVA_THEME_STORAGE_KEY) === AURORA_DARK
-      ? AURORA_DARK
-      : null
+    return parseTheme(window.localStorage.getItem(WALTIVA_THEME_STORAGE_KEY))
   } catch {
     return null
   }
@@ -122,52 +223,69 @@ function readStoredTheme(): WaltivaThemeId | null {
 
 function saveStoredTheme(theme: WaltivaThemeId | null): void {
   try {
-    if (theme === AURORA_DARK) {
-      window.localStorage.setItem(WALTIVA_THEME_STORAGE_KEY, AURORA_DARK)
-    } else {
-      window.localStorage.removeItem(WALTIVA_THEME_STORAGE_KEY)
-    }
+    if (theme) window.localStorage.setItem(WALTIVA_THEME_STORAGE_KEY, theme)
+    else window.localStorage.removeItem(WALTIVA_THEME_STORAGE_KEY)
   } catch {
     // localStorage can be unavailable in privacy-restricted contexts.
   }
 }
 
-function ensureAuroraStylesheet(doc: Document): void {
-  if (!doc.head || doc.getElementById(THEME_STYLESHEET_ID)) return
+function ensureThemeStylesheets(doc: Document): void {
+  if (!doc.head) return
 
-  const link = doc.createElement('link')
-  link.id = THEME_STYLESHEET_ID
-  link.rel = 'stylesheet'
-  link.href = new URL('./waltiva/themes/aurora-dark.css?v=4', document.baseURI).href
-  doc.head.appendChild(link)
+  THEME_STYLESHEETS.forEach(({ id, path }) => {
+    const href = new URL(path, document.baseURI).href
+    const existing = doc.getElementById(id) as HTMLLinkElement | null
+    if (existing) {
+      if (existing.href !== href) existing.href = href
+      return
+    }
+
+    const link = doc.createElement('link')
+    link.id = id
+    link.rel = 'stylesheet'
+    link.href = href
+    doc.head.appendChild(link)
+  })
 }
 
-function setAuroraTokens(doc: Document, active: boolean): void {
+function setThemeTokens(doc: Document, theme: WaltivaThemeId | null): void {
   const targets = [doc.documentElement, doc.body].filter(Boolean) as HTMLElement[]
 
   targets.forEach((target) => {
-    Object.entries(AURORA_TOKENS).forEach(([token, value]) => {
-      const property = `--${token}`
-      if (active) target.style.setProperty(property, value)
-      else target.style.removeProperty(property)
+    ALL_CUSTOM_TOKEN_NAMES.forEach((token) => target.style.removeProperty(`--${token}`))
+
+    if (!theme) return
+    Object.entries(THEME_TOKENS[theme]).forEach(([token, value]) => {
+      // The native editor declares several theme tokens with !important.
+      target.style.setProperty(`--${token}`, value, 'important')
     })
   })
 }
 
-function applyAurora(doc: Document, active: boolean): void {
+function applyAurora(doc: Document, theme: WaltivaThemeId | null): void {
   if (!doc.documentElement) return
 
-  ensureAuroraStylesheet(doc)
+  ensureThemeStylesheets(doc)
 
-  if (active) {
+  doc.body?.classList.remove('theme-aurora-dark', 'theme-aurora-light')
+
+  if (theme === AURORA_DARK) {
     doc.documentElement.setAttribute(WALTIVA_THEME_ATTRIBUTE, AURORA_DARK)
     doc.body?.classList.add('theme-aurora-dark', 'theme-type-dark')
+  } else if (theme === AURORA_LIGHT) {
+    doc.documentElement.setAttribute(WALTIVA_THEME_ATTRIBUTE, AURORA_LIGHT)
+    // Reuse every Aurora geometry rule, then let the light marker recolour it.
+    doc.body?.classList.add('theme-aurora-dark', 'theme-aurora-light')
+    doc.body?.classList.remove('theme-type-dark')
   } else {
     doc.documentElement.removeAttribute(WALTIVA_THEME_ATTRIBUTE)
-    doc.body?.classList.remove('theme-aurora-dark')
+    // If the custom dark variant added this marker, the native theme handler
+    // can restore it immediately when a built-in dark option is selected.
+    doc.body?.classList.remove('theme-type-dark')
   }
 
-  setAuroraTokens(doc, active)
+  setThemeTokens(doc, theme)
 }
 
 function getMenuItems(menu: Element): HTMLElement[] {
@@ -196,7 +314,7 @@ function replaceItemLabel(root: HTMLElement, nextLabel: string): void {
     const trimmed = raw.trim()
     const normalized = normalizeLabel(trimmed)
 
-    if (CONTRAST_DARK_LABELS.has(normalized) || AURORA_LABELS.has(normalized)) {
+    if (CONTRAST_DARK_LABELS.has(normalized) || CUSTOM_LABEL_TO_ID.has(normalized)) {
       node.nodeValue = raw.replace(trimmed, nextLabel)
       return
     }
@@ -212,30 +330,37 @@ function stripDuplicateIds(root: HTMLElement): void {
   root.querySelectorAll<HTMLElement>('[id]').forEach((element) => element.removeAttribute('id'))
 }
 
-function findAuroraItem(menu: Element): HTMLElement | null {
+function findCustomItem(menu: Element, theme: WaltivaThemeId): HTMLElement | null {
+  const definition = WALTIVA_THEMES.find((candidate) => candidate.id === theme)
+  const normalizedLabel = normalizeLabel(definition?.label)
+
   return (
     getMenuItems(menu).find(
-      (item) => item.getAttribute(CUSTOM_OPTION_ATTRIBUTE) === AURORA_DARK,
+      (item) => item.getAttribute(CUSTOM_OPTION_ATTRIBUTE) === theme,
     ) ??
-    getMenuItems(menu).find((item) => AURORA_LABELS.has(normalizeLabel(item.textContent))) ??
+    getMenuItems(menu).find((item) => normalizeLabel(item.textContent) === normalizedLabel) ??
     null
   )
 }
 
-function updateThemeMenuState(menu: Element, active: boolean): void {
+function updateThemeMenuState(menu: Element, activeTheme: WaltivaThemeId | null): void {
   const items = getMenuItems(menu)
-  const auroraItem = findAuroraItem(menu)
-  if (!auroraItem) return
 
-  const auroraControl = getItemControl(auroraItem)
-  auroraItem.classList.toggle('checked', active)
-  auroraControl.classList.toggle('checked', active)
-  auroraControl.setAttribute('aria-checked', active ? 'true' : 'false')
+  WALTIVA_THEMES.forEach((theme) => {
+    const item = findCustomItem(menu, theme.id)
+    if (!item) return
 
-  if (!active) return
+    const active = activeTheme === theme.id
+    const control = getItemControl(item)
+    item.classList.toggle('checked', active)
+    control.classList.toggle('checked', active)
+    control.setAttribute('aria-checked', active ? 'true' : 'false')
+  })
+
+  if (!activeTheme) return
 
   items.forEach((item) => {
-    if (item === auroraItem) return
+    if (item.getAttribute(CUSTOM_OPTION_ATTRIBUTE) === activeTheme) return
     const control = getItemControl(item)
     item.classList.remove('checked', 'active', 'selected')
     control.classList.remove('checked', 'active', 'selected')
@@ -243,16 +368,8 @@ function updateThemeMenuState(menu: Element, active: boolean): void {
   })
 }
 
-function ensureAuroraMenuOption(menu: HTMLElement, active: boolean): void {
+function ensureCustomThemeOptions(menu: HTMLElement, activeTheme: WaltivaThemeId | null): void {
   if (!looksLikeThemeMenu(menu)) return
-
-  let auroraItem = findAuroraItem(menu)
-  if (auroraItem) {
-    auroraItem.setAttribute(CUSTOM_OPTION_ATTRIBUTE, AURORA_DARK)
-    replaceItemLabel(auroraItem, AURORA_DARK_LABEL)
-    updateThemeMenuState(menu, active)
-    return
-  }
 
   const items = getMenuItems(menu)
   const contrastItem = items.find((item) =>
@@ -260,23 +377,36 @@ function ensureAuroraMenuOption(menu: HTMLElement, active: boolean): void {
   )
   if (!contrastItem) return
 
-  auroraItem = contrastItem.cloneNode(true) as HTMLElement
-  stripDuplicateIds(auroraItem)
-  auroraItem.setAttribute(CUSTOM_OPTION_ATTRIBUTE, AURORA_DARK)
-  auroraItem.classList.remove('checked', 'active', 'selected')
+  let insertionAnchor: HTMLElement = contrastItem
 
-  const control = getItemControl(auroraItem)
-  control.classList.remove('checked', 'active', 'selected')
-  control.setAttribute('aria-checked', 'false')
-  replaceItemLabel(auroraItem, AURORA_DARK_LABEL)
+  WALTIVA_THEMES.forEach((theme) => {
+    let item = findCustomItem(menu, theme.id)
 
-  contrastItem.insertAdjacentElement('afterend', auroraItem)
-  updateThemeMenuState(menu, active)
+    if (!item) {
+      item = contrastItem.cloneNode(true) as HTMLElement
+      stripDuplicateIds(item)
+      item.classList.remove('checked', 'active', 'selected')
+
+      const control = getItemControl(item)
+      control.classList.remove('checked', 'active', 'selected')
+      control.setAttribute('aria-checked', 'false')
+      replaceItemLabel(item, theme.label)
+
+      insertionAnchor.insertAdjacentElement('afterend', item)
+    } else {
+      replaceItemLabel(item, theme.label)
+    }
+
+    item.setAttribute(CUSTOM_OPTION_ATTRIBUTE, theme.id)
+    insertionAnchor = item
+  })
+
+  updateThemeMenuState(menu, activeTheme)
 }
 
-function scanThemeMenus(doc: Document, active: boolean): void {
+function scanThemeMenus(doc: Document, activeTheme: WaltivaThemeId | null): void {
   doc.querySelectorAll<HTMLElement>('.dropdown-menu').forEach((menu) => {
-    ensureAuroraMenuOption(menu, active)
+    ensureCustomThemeOptions(menu, activeTheme)
   })
 }
 
@@ -317,15 +447,15 @@ export function initWaltivaThemeSystem(): () => void {
   >()
 
   const syncHost = (): void => {
-    applyAurora(document, activeTheme === AURORA_DARK)
+    applyAurora(document, activeTheme)
     saveStoredTheme(activeTheme)
   }
 
   const syncEverywhere = (): void => {
     syncHost()
     attachedDocuments.forEach((doc) => {
-      applyAurora(doc, activeTheme === AURORA_DARK)
-      scanThemeMenus(doc, activeTheme === AURORA_DARK)
+      applyAurora(doc, activeTheme)
+      scanThemeMenus(doc, activeTheme)
     })
   }
 
@@ -340,7 +470,7 @@ export function initWaltivaThemeSystem(): () => void {
     if (!doc.documentElement || attachedDocuments.has(doc)) return
 
     attachedDocuments.add(doc)
-    applyAurora(doc, activeTheme === AURORA_DARK)
+    applyAurora(doc, activeTheme)
 
     let rafPending = false
     const scheduleSync = (): void => {
@@ -348,8 +478,8 @@ export function initWaltivaThemeSystem(): () => void {
       rafPending = true
       window.requestAnimationFrame(() => {
         rafPending = false
-        applyAurora(doc, activeTheme === AURORA_DARK)
-        scanThemeMenus(doc, activeTheme === AURORA_DARK)
+        applyAurora(doc, activeTheme)
+        scanThemeMenus(doc, activeTheme)
       })
     }
 
@@ -361,39 +491,44 @@ export function initWaltivaThemeSystem(): () => void {
       attributeFilter: ['class'],
     })
 
-    const getAuroraContext = (event: Event): { item: HTMLElement; menu: HTMLElement } | null => {
+    const getCustomThemeContext = (
+      event: Event,
+    ): { item: HTMLElement; menu: HTMLElement; theme: WaltivaThemeId } | null => {
       const target = getEventTargetElement(event)
       if (!target) return null
 
-      const item = target.closest<HTMLElement>(`[${CUSTOM_OPTION_ATTRIBUTE}="${AURORA_DARK}"]`)
+      const item = target.closest<HTMLElement>(`[${CUSTOM_OPTION_ATTRIBUTE}]`)
       if (!item) return null
+
+      const theme = parseTheme(item.getAttribute(CUSTOM_OPTION_ATTRIBUTE))
+      if (!theme) return null
 
       const menu = item.closest<HTMLElement>('.dropdown-menu')
       if (!menu || !looksLikeThemeMenu(menu)) return null
-      return { item, menu }
+      return { item, menu, theme }
     }
 
-    const activateAurora = (event: Event, closeMenuAfter: boolean): boolean => {
-      const context = getAuroraContext(event)
+    const activateCustomTheme = (event: Event, closeMenuAfter: boolean): boolean => {
+      const context = getCustomThemeContext(event)
       if (!context) return false
 
       stopOnlyOfficeHandling(event)
-      setActiveTheme(AURORA_DARK)
-      updateThemeMenuState(context.menu, true)
+      setActiveTheme(context.theme)
+      updateThemeMenuState(context.menu, context.theme)
       if (closeMenuAfter) closeDropdown(context.menu)
       return true
     }
 
     const onPointerDown = (event: PointerEvent): void => {
-      activateAurora(event, false)
+      activateCustomTheme(event, false)
     }
 
     const onMouseDown = (event: MouseEvent): void => {
-      activateAurora(event, false)
+      activateCustomTheme(event, false)
     }
 
     const onClick = (event: MouseEvent): void => {
-      if (activateAurora(event, true)) return
+      if (activateCustomTheme(event, true)) return
 
       const target = getEventTargetElement(event)
       if (!target) return
@@ -404,7 +539,7 @@ export function initWaltivaThemeSystem(): () => void {
 
       const label = normalizeLabel(item.textContent)
       if (BUILT_IN_THEME_LABELS.has(label)) {
-        // Remove only the Waltiva overlay. The original ONLYOFFICE click continues normally.
+        // Remove only Waltiva's overlay; ONLYOFFICE still handles its own click.
         setActiveTheme(null)
       }
     }
@@ -481,7 +616,7 @@ export function initWaltivaThemeSystem(): () => void {
 
   const onStorage = (event: StorageEvent): void => {
     if (event.key !== WALTIVA_THEME_STORAGE_KEY) return
-    activeTheme = event.newValue === AURORA_DARK ? AURORA_DARK : null
+    activeTheme = parseTheme(event.newValue)
     syncEverywhere()
   }
 
@@ -501,7 +636,7 @@ export function initWaltivaThemeSystem(): () => void {
     frameStates.clear()
     attachedDocuments.clear()
     documentCleanups.clear()
-    applyAurora(document, false)
+    applyAurora(document, null)
     initialized = false
   }
 }
