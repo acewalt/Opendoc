@@ -5,9 +5,11 @@ import router from './router'
 import AddModules from './modules/index'
 import { initWaltivaThemeSystem } from './utils/waltivaTheme'
 import { initSmartArtCompatibilityFix } from './utils/smartArtFix'
+import { initAuroraContinuityLayer } from './utils/auroraContinuity'
 
 initWaltivaThemeSystem()
 initSmartArtCompatibilityFix()
+initAuroraContinuityLayer()
 
 const app = createApp(App)
 AddModules({ app, router })
