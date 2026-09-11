@@ -12,12 +12,74 @@ const probeTimers = new WeakMap<HTMLIFrameElement, number>()
 const PATCHED_MENU = '__waltivaSmartArtMenuPatched'
 const PATCHED_ITEM = '__waltivaSmartArtItemPatched'
 const PREVIEW_FALLBACK = '__waltivaSmartArtPreviewFallback'
+const VISUAL_FIX_STYLE_ID = 'waltiva-editor-compatibility-style'
+
+const VISUAL_FIX_CSS = `
+/* Aurora Dark: the font preview sprite is dark and needs a light surface. */
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu,
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .scrollable-menu,
+body.theme-aurora-dark #slot-field-fontname .scrollable-menu {
+  color: #24212b !important;
+  background: #fbfbfd !important;
+  background-image: none !important;
+  border-color: rgba(35, 31, 45, .18) !important;
+  box-shadow: 0 16px 38px rgba(7, 7, 12, .34) !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu > li,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu > li,
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu > li > a,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu > li > a {
+  color: #24212b !important;
+  background-color: #fbfbfd !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu > li > a:hover,
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu > li.active > a,
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu > li.selected > a,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu > li > a:hover,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu > li.active > a,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu > li.selected > a {
+  color: #1f1b29 !important;
+  background: #eeeafd !important;
+}
+
+html[data-waltiva-theme='aurora-dark'] #slot-field-fontname .dropdown-menu .divider,
+body.theme-aurora-dark #slot-field-fontname .dropdown-menu .divider {
+  border-color: rgba(42, 37, 52, .12) !important;
+}
+`
 
 function getFrameWindow(frame: HTMLIFrameElement): AnyObject | null {
   try {
     return frame.contentWindow as AnyObject | null
   } catch {
     return null
+  }
+}
+
+function isDomElement(value: unknown): value is HTMLElement {
+  const candidate = value as AnyObject | null
+  return !!candidate && candidate.nodeType === 1 && typeof candidate.querySelector === 'function'
+}
+
+function isDomNode(value: unknown): value is Node {
+  const candidate = value as AnyObject | null
+  return !!candidate && typeof candidate.nodeType === 'number'
+}
+
+function installVisualFixes(win: AnyObject): void {
+  try {
+    const doc = win.document as Document | undefined
+    if (!doc?.head || doc.getElementById(VISUAL_FIX_STYLE_ID)) return
+
+    const style = doc.createElement('style')
+    style.id = VISUAL_FIX_STYLE_ID
+    style.textContent = VISUAL_FIX_CSS
+    doc.head.appendChild(style)
+  } catch {
+    // The local editor is same-origin, but it can be briefly unavailable while navigating.
   }
 }
 
@@ -39,7 +101,7 @@ function getToolbarView(controller: AnyObject): AnyObject | null {
 
 function getItemElement(item: AnyObject): HTMLElement | null {
   const element = item?.$el?.[0] ?? item?.cmpEl?.[0] ?? item?.el
-  return element instanceof HTMLElement ? element : null
+  return isDomElement(element) ? element : null
 }
 
 function getItemJQuery(item: AnyObject): AnyObject | null {
@@ -64,7 +126,13 @@ function closeSiblingCategories(rootMenu: AnyObject, activeItem: AnyObject): voi
       }
     }
 
-    $item.removeClass('over')
+    try {
+      item.menu?.hide?.()
+    } catch {
+      // A sibling menu can already be detached while the root menu is closing.
+    }
+
+    $item.removeClass('over open')
   })
 }
 
@@ -79,6 +147,7 @@ function schedulePreviewFallback(
   item[PREVIEW_FALLBACK] = true
 
   win.setTimeout?.(() => {
+    item[PREVIEW_FALLBACK] = false
     if (picker.store?.length > 0) return
 
     const api = controller?.api
@@ -89,7 +158,7 @@ function schedulePreviewFallback(
     } catch (error) {
       console.error('[Waltiva] No se pudieron generar las previsualizaciones de SmartArt.', error)
     }
-  }, 1500)
+  }, 650)
 }
 
 function openSmartArtCategory(
@@ -122,13 +191,13 @@ function openSmartArtCategory(
   closeSiblingCategories(rootMenu, item)
 
   try {
-    // In this ONLYOFFICE build submenu positioning is deferred to the same
-    // mouseenter that requests SmartArt previews. If preview generation stalls
-    // or throws, the submenu can remain at its off-screen initial position.
-    // Position and expose the already-created native submenu first.
+    // SmartArt in this build creates the child menu correctly, but opening it is
+    // coupled to a one-shot mouseenter used to request SDK previews. Open the
+    // native child menu independently so a delayed preview cannot hide it.
+    $item.addClass('over open')
     $item.trigger('show.bs.dropdown')
+    item.menu.show?.()
     item.menu.alignPosition?.()
-    $item.addClass('over')
     $item.trigger('shown.bs.dropdown')
     item.menu.alignPosition?.()
   } catch (error) {
@@ -147,19 +216,16 @@ function patchCategoryItem(
   if (!item?.menu || item[PATCHED_ITEM]) return
 
   const element = getItemElement(item)
-  const $item = getItemJQuery(item)
-  if (!element || !$item) return
+  if (!element || !getItemJQuery(item)) return
 
   item[PATCHED_ITEM] = true
 
-  // Native capture runs before the legacy jQuery `mouseenter` handler that
-  // synchronously asks the SDK for SmartArt previews. This makes opening the
-  // child panel independent from preview generation.
+  // Capture phase runs before the legacy jQuery mouseenter callback.
   element.addEventListener(
     'mouseover',
     (event: MouseEvent) => {
       const related = event.relatedTarget
-      if (related instanceof Node && element.contains(related)) return
+      if (isDomNode(related) && element.contains(related)) return
       openSmartArtCategory(win, controller, rootMenu, item)
     },
     true,
@@ -203,6 +269,8 @@ function tryPatchFrame(frame: HTMLIFrameElement): boolean {
   const win = getFrameWindow(frame)
   if (!win) return false
 
+  installVisualFixes(win)
+
   const controller = getToolbarController(win)
   const toolbar = controller ? getToolbarView(controller) : null
   const rootMenu = toolbar?.btnInsertSmartArt?.menu
@@ -212,16 +280,13 @@ function tryPatchFrame(frame: HTMLIFrameElement): boolean {
   if (!rootMenu[PATCHED_MENU]) {
     rootMenu[PATCHED_MENU] = true
 
-    // The legacy bundle creates each category's DataView in `show:before`.
-    // Patch after that hook has run, then re-run on later openings in case a
-    // category was re-rendered by ONLYOFFICE.
+    // The legacy bundle creates each category DataView in show:before.
+    // Patch immediately after that first render and on subsequent openings.
     rootMenu.on?.('show:after', () => {
       win.setTimeout?.(() => patchSmartArtMenu(win, controller, rootMenu), 0)
     })
   }
 
-  // If SmartArt has already been opened before this helper became ready,
-  // patch the existing menu items immediately as well.
   patchSmartArtMenu(win, controller, rootMenu)
   return true
 }
@@ -257,10 +322,9 @@ function scanFrames(): void {
 }
 
 /**
- * Compatibility fix for the SmartArt category submenus shipped with Waltiva's
- * local ONLYOFFICE build. It does not replace SmartArt or alter document data;
- * it only restores opening/positioning of the native child menus and retries
- * preview generation if the legacy hover request never populates them.
+ * Compatibility fixes for Waltiva's local ONLYOFFICE document editor:
+ * - restores SmartArt child-menu opening independently from preview generation;
+ * - keeps the Aurora Dark font-preview dropdown legible on a light surface.
  */
 export function initSmartArtCompatibilityFix(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
