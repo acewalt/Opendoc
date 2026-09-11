@@ -1,0 +1,167 @@
+name: Fix Aurora Dark theme
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-aurora-theme.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Corregir eventos cross-frame del tema Aurora
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/utils/waltivaTheme.ts')
+          text = path.read_text(encoding='utf-8')
+
+          anchor = '''function closeDropdown(menu: Element): void {
+            menu.closest('.open')?.classList.remove('open')
+            menu.closest('.over')?.classList.remove('over')
+          }
+
+          export function initWaltivaThemeSystem(): () => void {'''
+
+          replacement = '''function closeDropdown(menu: Element): void {
+            menu.closest('.open')?.classList.remove('open')
+            menu.closest('.over')?.classList.remove('over')
+          }
+
+          function getEventTargetElement(event: Event): HTMLElement | null {
+            const target = event.target as EventTarget | null
+            if (!target || typeof (target as HTMLElement).closest !== 'function') return null
+            return target as HTMLElement
+          }
+
+          export function initWaltivaThemeSystem(): () => void {'''
+
+          if 'function getEventTargetElement(event: Event)' not in text:
+              if anchor not in text:
+                  raise SystemExit('No se encontró el punto de inserción para getEventTargetElement')
+              text = text.replace(anchor, replacement, 1)
+
+          old = 'const target = event.target instanceof Element ? event.target : null'
+          count = text.count(old)
+          if count:
+              text = text.replace(old, 'const target = getEventTargetElement(event)')
+          elif text.count('const target = getEventTargetElement(event)') < 2:
+              raise SystemExit('No se encontraron los manejadores de eventos esperados')
+
+          path.write_text(text, encoding='utf-8')
+          print('Aurora cross-frame event handling fixed')
+          PY
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Probar selección real de Aurora Dark
+        shell: bash
+        run: |
+          pnpm exec vite preview --host 127.0.0.1 --port 4175 > /tmp/waltiva-aurora-vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID || true' EXIT
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4175/ >/dev/null && break; sleep 1; done
+
+          node <<'NODE'
+          const { chromium } = require('@playwright/test');
+          const assert = require('node:assert/strict');
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+            await page.goto('http://127.0.0.1:4175/#/', { waitUntil: 'networkidle' });
+            await page.getByText('Crear documento', { exact: true }).click();
+            await page.getByText('Documento', { exact: true }).click();
+
+            await page.waitForFunction(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
+              return !!frame?.contentDocument?.querySelector('[data-waltiva-theme-option="aurora-dark"]');
+            }, null, { timeout: 120000 });
+
+            const before = await page.evaluate(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
+              const doc = frame?.contentDocument;
+              const item = doc?.querySelector('[data-waltiva-theme-option="aurora-dark"]');
+              return {
+                exists: !!item,
+                rootTheme: doc?.documentElement.getAttribute('data-waltiva-theme'),
+                bodyClass: doc?.body?.className || '',
+              };
+            });
+            assert.ok(before.exists, 'Aurora Dark no aparece en el menú');
+
+            await page.evaluate(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
+              const doc = frame.contentDocument;
+              const item = doc.querySelector('[data-waltiva-theme-option="aurora-dark"]');
+              const control = item.querySelector('a, button, [role="menuitem"]') || item;
+              control.click();
+            });
+
+            await page.waitForFunction(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
+              const doc = frame?.contentDocument;
+              return doc?.documentElement.getAttribute('data-waltiva-theme') === 'aurora-dark';
+            }, null, { timeout: 5000 });
+
+            const after = await page.evaluate(() => {
+              const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
+              const doc = frame.contentDocument;
+              const root = doc.documentElement;
+              const link = doc.getElementById('waltiva-aurora-dark-styles');
+              return {
+                rootTheme: root.getAttribute('data-waltiva-theme'),
+                bodyAurora: doc.body.classList.contains('theme-aurora-dark'),
+                toolbarToken: root.style.getPropertyValue('--background-toolbar').trim(),
+                canvasToken: root.style.getPropertyValue('--canvas-background').trim(),
+                cssLoaded: !!link && !!link.sheet,
+                stored: localStorage.getItem('waltiva.interface-theme'),
+              };
+            });
+
+            console.log('AURORA_STATE=' + JSON.stringify(after, null, 2));
+            assert.equal(after.rootTheme, 'aurora-dark');
+            assert.equal(after.bodyAurora, true);
+            assert.equal(after.toolbarToken, '#272338');
+            assert.equal(after.canvasToken, '#15131f');
+            assert.equal(after.cssLoaded, true);
+            assert.equal(after.stored, 'aurora-dark');
+
+            await browser.close();
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Guardar corrección
+        shell: bash
+        run: |
+          git config user.name "Waltiva CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/utils/waltivaTheme.ts
+          git commit -m "fix(theme): activate Aurora Dark inside ONLYOFFICE iframe"
+          git pull --rebase origin main
+          git push
