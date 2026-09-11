@@ -1,5 +1,3 @@
-type AnyObject = Record<string, any>
-
 const FRAME_SELECTOR = [
   'iframe[name="frameEditor"]',
   '#iframe iframe',
@@ -8,20 +6,15 @@ const FRAME_SELECTOR = [
 
 const registeredFrames = new WeakSet<HTMLIFrameElement>()
 const probeTimers = new WeakMap<HTMLIFrameElement, number>()
-
-const PATCHED_MENU = '__waltivaSmartArtMenuPatched'
-const PATCHED_ITEM = '__waltivaSmartArtItemPatched'
-const PATCHED_CHILD_MENU = '__waltivaSmartArtChildMenuPatched'
-const ORIGINAL_ROOT_HIDE = '__waltivaSmartArtOriginalRootHide'
-const ORIGINAL_CHILD_HIDE = '__waltivaSmartArtOriginalChildHide'
-const ACTIVE_ITEM = '__waltivaSmartArtActiveItem'
-const HOLD_OPEN = '__waltivaSmartArtHoldOpen'
-const ALLOW_CLOSE = '__waltivaSmartArtAllowClose'
-const RELEASE_TIMER = '__waltivaSmartArtReleaseTimer'
-const IN_PARENT = '__waltivaSmartArtInParent'
-const IN_CHILD = '__waltivaSmartArtInChild'
-const IN_ROOT = '__waltivaSmartArtInRoot'
-const DOCUMENT_GUARD = '__waltivaSmartArtDocumentGuard'
+const INSERT_MENU_CONFIGS = [
+  { toolbarKey: 'btnInsertSmartArt', selector: '#tlbtn-insertsmartart' },
+  { toolbarKey: 'btnInsertEquation', selector: '#tlbtn-insertequation' },
+] as const
+const patchedInsertMenus = new WeakSet<object>()
+const patchedInsertSubmenus = new WeakSet<HTMLElement>()
+const patchedInsertDocuments = new WeakMap<Document, Set<string>>()
+const insertHoverTimers = new WeakMap<HTMLElement, number>()
+const insertPointerPositions = new WeakMap<Document, { x: number; y: number }>()
 const VISUAL_FIX_STYLE_ID = 'waltiva-editor-compatibility-style'
 
 const VISUAL_FIX_CSS = `
@@ -61,470 +54,195 @@ body.theme-aurora-dark #slot-field-fontname .dropdown-menu .divider {
 }
 `
 
-function getFrameWindow(frame: HTMLIFrameElement): AnyObject | null {
+function installVisualFixes(frame: HTMLIFrameElement): boolean {
   try {
-    return frame.contentWindow as AnyObject | null
-  } catch {
-    return null
-  }
-}
-
-function isDomElement(value: unknown): value is HTMLElement {
-  const candidate = value as AnyObject | null
-  return !!candidate && candidate.nodeType === 1 && typeof candidate.querySelector === 'function'
-}
-
-function isDomNode(value: unknown): value is Node {
-  const candidate = value as AnyObject | null
-  return !!candidate && typeof candidate.nodeType === 'number'
-}
-
-function installVisualFixes(win: AnyObject): void {
-  try {
-    const doc = win.document as Document | undefined
-    if (!doc?.head || doc.getElementById(VISUAL_FIX_STYLE_ID)) return
+    const doc = frame.contentDocument
+    if (!doc?.head) return false
+    if (doc.getElementById(VISUAL_FIX_STYLE_ID)) return true
 
     const style = doc.createElement('style')
     style.id = VISUAL_FIX_STYLE_ID
     style.textContent = VISUAL_FIX_CSS
     doc.head.appendChild(style)
+    return true
   } catch {
-    // The local editor is same-origin, but it can be briefly unavailable while navigating.
+    // A frame can be briefly inaccessible during navigation.
+    return false
   }
 }
 
-function getToolbarController(win: AnyObject): AnyObject | null {
+function patchInsertMenuPointerTransition(
+  frame: HTMLIFrameElement,
+  config: (typeof INSERT_MENU_CONFIGS)[number],
+): boolean {
   try {
-    return win.DE?.getController?.('Toolbar') ?? null
-  } catch {
-    return null
-  }
-}
+    const win = frame.contentWindow as (Window & Record<string, any>) | null
+    const doc = frame.contentDocument
+    const getRootMenu = (): Record<string, any> | undefined =>
+      win?.DE?.getController?.('Toolbar')?.toolbar?.[config.toolbarKey]?.menu
+    const rootMenu = getRootMenu()
 
-function getToolbarView(controller: AnyObject): AnyObject | null {
-  try {
-    return controller?.toolbar ?? controller?.getView?.() ?? controller?.getView?.('Toolbar') ?? null
-  } catch {
-    return null
-  }
-}
-
-function getItemElement(item: AnyObject): HTMLElement | null {
-  const element = item?.$el?.[0] ?? item?.cmpEl?.[0] ?? item?.el
-  return isDomElement(element) ? element : null
-}
-
-function getMenuElement(menu: AnyObject): HTMLElement | null {
-  const element = menu?.$el?.[0] ?? menu?.cmpEl?.[0] ?? menu?.el
-  return isDomElement(element) ? element : null
-}
-
-function getItemJQuery(item: AnyObject): AnyObject | null {
-  const jq = item?.$el ?? item?.cmpEl
-  return jq?.length ? jq : null
-}
-
-function clearReleaseTimer(win: AnyObject, item: AnyObject): void {
-  if (!item?.[RELEASE_TIMER]) return
-  try {
-    win.clearTimeout?.(item[RELEASE_TIMER])
-  } catch {
-    // Ignore stale timers owned by an old render of the menu.
-  }
-  item[RELEASE_TIMER] = null
-}
-
-function clearNativeTimers(win: AnyObject, item: AnyObject): void {
-  for (const key of ['hideMenuTimer', 'expandMenuTimer']) {
-    if (!item?.[key]) continue
-    try {
-      win.clearTimeout?.(item[key])
-    } catch {
-      // ONLYOFFICE owns these timers; failure here must not block SmartArt.
-    }
-    item[key] = null
-  }
-}
-
-function allowNativeClose(win: AnyObject, rootMenu: AnyObject, item: AnyObject): void {
-  if (!item) return
-  clearReleaseTimer(win, item)
-  clearNativeTimers(win, item)
-  item[HOLD_OPEN] = false
-  item[ALLOW_CLOSE] = true
-  item[IN_PARENT] = false
-  item[IN_CHILD] = false
-  if (rootMenu?.[ACTIVE_ITEM] === item) rootMenu[ACTIVE_ITEM] = null
-}
-
-function patchHideGuards(rootMenu: AnyObject, item: AnyObject): void {
-  if (typeof rootMenu?.hide === 'function' && !rootMenu[ORIGINAL_ROOT_HIDE]) {
-    const originalRootHide = rootMenu.hide
-    rootMenu[ORIGINAL_ROOT_HIDE] = originalRootHide
-    rootMenu.hide = function (...args: any[]) {
-      const active = rootMenu[ACTIVE_ITEM]
-      if (active?.[HOLD_OPEN] && !active?.[ALLOW_CLOSE]) return this
-      return originalRootHide.apply(this, args)
-    }
-  }
-
-  if (typeof item?.menu?.hide === 'function' && !item.menu[ORIGINAL_CHILD_HIDE]) {
-    const originalChildHide = item.menu.hide
-    item.menu[ORIGINAL_CHILD_HIDE] = originalChildHide
-    item.menu.hide = function (...args: any[]) {
-      if (item[HOLD_OPEN] && !item[ALLOW_CLOSE]) return this
-      return originalChildHide.apply(this, args)
-    }
-  }
-}
-
-function holdCategoryOpen(win: AnyObject, rootMenu: AnyObject, item: AnyObject): void {
-  const previous = rootMenu?.[ACTIVE_ITEM]
-  if (previous && previous !== item) allowNativeClose(win, rootMenu, previous)
-
-  clearReleaseTimer(win, item)
-  clearNativeTimers(win, item)
-  patchHideGuards(rootMenu, item)
-
-  rootMenu[ACTIVE_ITEM] = item
-  item[HOLD_OPEN] = true
-  item[ALLOW_CLOSE] = false
-}
-
-function releaseCategory(
-  win: AnyObject,
-  rootMenu: AnyObject,
-  item: AnyObject,
-  closeRoot: boolean,
-): void {
-  if (!item) return
-
-  clearReleaseTimer(win, item)
-  item[HOLD_OPEN] = false
-  item[ALLOW_CLOSE] = true
-
-  try {
-    item.menu?.hide?.()
-  } catch {
-    // The menu may already have been removed by ONLYOFFICE after a selection.
-  }
-
-  getItemJQuery(item)?.removeClass('over open')
-  if (rootMenu?.[ACTIVE_ITEM] === item) rootMenu[ACTIVE_ITEM] = null
-
-  if (closeRoot) {
-    try {
-      rootMenu?.hide?.()
-    } catch {
-      // Let ONLYOFFICE finish its own close lifecycle if the menu is already closing.
-    }
-  }
-}
-
-function scheduleRelease(win: AnyObject, rootMenu: AnyObject, item: AnyObject): void {
-  clearReleaseTimer(win, item)
-  item[RELEASE_TIMER] = win.setTimeout?.(() => {
-    item[RELEASE_TIMER] = null
-    if (rootMenu?.[ACTIVE_ITEM] !== item) return
-    if (item[IN_PARENT] || item[IN_CHILD]) return
-
-    releaseCategory(win, rootMenu, item, !rootMenu?.[IN_ROOT])
-  }, 280)
-}
-
-function closeSiblingCategories(win: AnyObject, rootMenu: AnyObject, activeItem: AnyObject): void {
-  const items = Array.isArray(rootMenu?.items) ? rootMenu.items : []
-
-  items.forEach((item: AnyObject) => {
-    if (item === activeItem || !item?.menu) return
-
-    item[HOLD_OPEN] = false
-    item[ALLOW_CLOSE] = true
-    clearReleaseTimer(win, item)
-    clearNativeTimers(win, item)
-
-    try {
-      item.menu.hide?.()
-    } catch {
-      // A sibling can already be detached while another category opens.
+    // During toolbar startup ONLYOFFICE temporarily uses `true` as the menu
+    // placeholder. Wait for the actual component before inspecting it.
+    if (!doc || !rootMenu || (typeof rootMenu !== 'object' && typeof rootMenu !== 'function')) {
+      return false
     }
 
-    getItemJQuery(item)?.removeClass('over open')
-  })
-}
-
-function patchChildMenu(
-  win: AnyObject,
-  rootMenu: AnyObject,
-  item: AnyObject,
-  parentElement: HTMLElement,
-): void {
-  const childElement = getMenuElement(item.menu)
-  if (!childElement || item.menu[PATCHED_CHILD_MENU] === childElement) return
-  item.menu[PATCHED_CHILD_MENU] = childElement
-
-  childElement.addEventListener('mouseenter', () => {
-    item[IN_CHILD] = true
-    holdCategoryOpen(win, rootMenu, item)
-  })
-
-  childElement.addEventListener('mouseleave', (event: MouseEvent) => {
-    item[IN_CHILD] = false
-    const related = event.relatedTarget
-    if (isDomNode(related) && parentElement.contains(related)) {
-      item[IN_PARENT] = true
-      holdCategoryOpen(win, rootMenu, item)
-      return
+    const getCurrentItem = (submenu: HTMLElement): Record<string, any> | undefined => {
+      const row = submenu.parentElement
+      if (!row) return undefined
+      const currentMenu = getRootMenu()
+      const items = Array.isArray(currentMenu?.items) ? currentMenu.items : []
+      return items.find((candidate: Record<string, any>) => {
+        const candidateRow = candidate?.el ?? candidate?.$el?.[0] ?? candidate?.cmpEl?.[0]
+        return candidateRow === row
+      })
     }
-    scheduleRelease(win, rootMenu, item)
-  })
 
-  const permitSelectionClose = (event: Event): void => {
-    const target = event.target
-    if (!isDomElement(target)) return
-    const selectable = target.closest('li, .item, .dataview-item, [role="option"], [role="menuitem"]')
-    if (!selectable || !childElement.contains(selectable)) return
+    const keepSubmenuOpen = (submenu: HTMLElement): void => {
+      const item = getCurrentItem(submenu)
+      if (!item) return
 
-    // Do not cancel the event: the native DataView click must insert the chosen SmartArt.
-    allowNativeClose(win, rootMenu, item)
-  }
-
-  childElement.addEventListener('pointerdown', permitSelectionClose, true)
-  childElement.addEventListener('mousedown', permitSelectionClose, true)
-  childElement.addEventListener(
-    'keydown',
-    (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        allowNativeClose(win, rootMenu, item)
-        return
+      // This is the flag checked by ONLYOFFICE's own delayed hide callback.
+      if (item.menu && typeof item.menu === 'object') item.menu.isOver = true
+      const timers = ['hideMenuTimer']
+      // Do not cancel the expansion timer while the pointer is still on the
+      // category row; it is what opens the gallery after ONLYOFFICE's delay.
+      if (submenu.getBoundingClientRect().width > 0) timers.push('expandMenuTimer')
+      for (const key of timers) {
+        if (!item[key]) continue
+        win.clearTimeout(item[key])
+        item[key] = null
       }
-      if (event.key === 'Enter' || event.key === ' ') permitSelectionClose(event)
-    },
-    true,
-  )
-}
-
-function openSmartArtCategory(
-  win: AnyObject,
-  rootMenu: AnyObject,
-  item: AnyObject,
-): void {
-  if (!item?.menu || item.disabled || item.isDisabled?.()) return
-
-  const $item = getItemJQuery(item)
-  const element = getItemElement(item)
-  if (!$item || !element) return
-
-  holdCategoryOpen(win, rootMenu, item)
-  closeSiblingCategories(win, rootMenu, item)
-
-  try {
-    // Keep the native menu implementation. We only decouple visibility from the
-    // fragile leave/hide timers; native mouseenter can still populate previews.
-    $item.addClass('over open')
-    item.menu.show?.()
-    item.menu.alignPosition?.()
-    patchChildMenu(win, rootMenu, item, element)
-
-    win.requestAnimationFrame?.(() => {
-      try {
-        item.menu.alignPosition?.()
-        patchChildMenu(win, rootMenu, item, element)
-      } catch {
-        // Menu could have been replaced after the preview DataView rendered.
-      }
-    })
-
-    win.setTimeout?.(() => patchChildMenu(win, rootMenu, item, element), 40)
-  } catch (error) {
-    console.error('[Waltiva] No se pudo abrir el submenú de SmartArt.', error)
-  }
-}
-
-function patchCategoryItem(
-  win: AnyObject,
-  rootMenu: AnyObject,
-  item: AnyObject,
-): void {
-  if (!item?.menu) return
-
-  const element = getItemElement(item)
-  if (!element || !getItemJQuery(item)) return
-  if (item[PATCHED_ITEM] === element) {
-    patchChildMenu(win, rootMenu, item, element)
-    return
-  }
-
-  item[PATCHED_ITEM] = element
-  patchHideGuards(rootMenu, item)
-
-  element.addEventListener('mouseenter', () => {
-    item[IN_PARENT] = true
-    openSmartArtCategory(win, rootMenu, item)
-  })
-
-  element.addEventListener('mouseleave', (event: MouseEvent) => {
-    item[IN_PARENT] = false
-    const childElement = getMenuElement(item.menu)
-    const related = event.relatedTarget
-    if (childElement && isDomNode(related) && childElement.contains(related)) {
-      item[IN_CHILD] = true
-      holdCategoryOpen(win, rootMenu, item)
-      return
     }
-    scheduleRelease(win, rootMenu, item)
-  })
 
-  const directAnchor = element.querySelector(':scope > a') as HTMLAnchorElement | null
-  if (directAnchor) {
-    directAnchor.addEventListener(
-      'click',
-      (event: MouseEvent) => {
-        // Category rows are containers, not SmartArt choices. Prevent ONLYOFFICE
-        // from treating this click as an outside selection that closes the root.
-        event.preventDefault()
-        event.stopPropagation()
-        openSmartArtCategory(win, rootMenu, item)
-      },
-      true,
-    )
+    const pointerIsInside = (submenu: HTMLElement): boolean => {
+      const pointer = insertPointerPositions.get(doc)
+      const row = submenu.parentElement
+      if (!pointer) return submenu.matches(':hover') || !!row?.matches(':hover')
 
-    directAnchor.addEventListener('focus', () => {
-      item[IN_PARENT] = true
-      openSmartArtCategory(win, rootMenu, item)
-    })
+      // Fractional scaling can leave a sub-pixel seam between the row and its
+      // fixed-position gallery. A small tolerance preserves the intended hover
+      // path without keeping the menu alive elsewhere in the toolbar.
+      const containsPointer = (element: Element | null, tolerance = 6): boolean => {
+        if (!element) return false
+        const rect = element.getBoundingClientRect()
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          pointer.x >= rect.left - tolerance &&
+          pointer.x <= rect.right + tolerance &&
+          pointer.y >= rect.top - tolerance &&
+          pointer.y <= rect.bottom + tolerance
+        )
+      }
 
-    directAnchor.addEventListener(
-      'keydown',
-      (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-          allowNativeClose(win, rootMenu, item)
+      return containsPointer(row) || containsPointer(submenu)
+    }
+
+    const stopHoverGuard = (submenu: HTMLElement): void => {
+      const timer = insertHoverTimers.get(submenu)
+      if (timer !== undefined) win.clearInterval(timer)
+      insertHoverTimers.delete(submenu)
+      const item = getCurrentItem(submenu)
+      if (item?.menu && typeof item.menu === 'object') item.menu.isOver = false
+    }
+
+    const startHoverGuard = (submenu: HTMLElement): void => {
+      keepSubmenuOpen(submenu)
+      if (insertHoverTimers.has(submenu)) return
+
+      const timer = win.setInterval(() => {
+        if (!pointerIsInside(submenu)) {
+          stopHoverGuard(submenu)
           return
         }
-        if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'ArrowRight') return
-        event.preventDefault()
-        event.stopPropagation()
-        openSmartArtCategory(win, rootMenu, item)
-      },
-      true,
-    )
+        keepSubmenuOpen(submenu)
+      }, 25)
+      insertHoverTimers.set(submenu, timer)
+    }
+
+    const patchItems = (): boolean => {
+      const items = Array.isArray(rootMenu.items) ? rootMenu.items : []
+      let patchedCount = 0
+
+      items.forEach((item: Record<string, any>) => {
+        const row = item?.el ?? item?.$el?.[0] ?? item?.cmpEl?.[0]
+        const submenu = row?.querySelector?.(':scope > ul.dropdown-menu') as HTMLElement | null
+        if (!submenu) return
+        patchedCount += 1
+        if (patchedInsertSubmenus.has(submenu)) return
+
+        patchedInsertSubmenus.add(submenu)
+        row.addEventListener('mouseenter', () => startHoverGuard(submenu))
+        submenu.addEventListener('mouseenter', () => startHoverGuard(submenu))
+        submenu.addEventListener('mouseleave', () => {
+          win.setTimeout(() => {
+            if (!pointerIsInside(submenu)) stopHoverGuard(submenu)
+          }, 0)
+        })
+      })
+
+      return patchedCount > 0
+    }
+
+    const documentRegistrations = patchedInsertDocuments.get(doc) ?? new Set<string>()
+    if (!documentRegistrations.has(config.selector)) {
+      documentRegistrations.add(config.selector)
+      patchedInsertDocuments.set(doc, documentRegistrations)
+      doc.addEventListener(
+        'mousemove',
+        (event) => {
+          insertPointerPositions.set(doc, { x: event.clientX, y: event.clientY })
+          const target = event.target as Element | null
+          const row = target?.closest?.(`${config.selector} > .dropdown-menu > li`)
+          const submenu = row?.querySelector?.(':scope > ul.dropdown-menu')
+          if (submenu) startHoverGuard(submenu as HTMLElement)
+        },
+        true,
+      )
+    }
+
+    if (!patchedInsertMenus.has(rootMenu)) {
+      patchedInsertMenus.add(rootMenu)
+      rootMenu.on?.('show:after', () => win.setTimeout(patchItems, 0))
+    }
+
+    return patchItems()
+  } catch {
+    return false
   }
-
-  patchChildMenu(win, rootMenu, item, element)
 }
 
-function patchRootMenuElement(win: AnyObject, rootMenu: AnyObject): void {
-  const rootElement = getMenuElement(rootMenu)
-  if (!rootElement || rootMenu.__waltivaSmartArtRootElement === rootElement) return
-  rootMenu.__waltivaSmartArtRootElement = rootElement
-
-  rootElement.addEventListener('mouseenter', () => {
-    rootMenu[IN_ROOT] = true
-    const active = rootMenu[ACTIVE_ITEM]
-    if (active) clearReleaseTimer(win, active)
-  })
-
-  rootElement.addEventListener('mouseleave', () => {
-    rootMenu[IN_ROOT] = false
-    const active = rootMenu[ACTIVE_ITEM]
-    if (active) scheduleRelease(win, rootMenu, active)
-  })
-}
-
-function patchDocumentGuard(win: AnyObject, rootMenu: AnyObject): void {
-  const doc = win.document as Document | undefined
-  if (!doc || rootMenu[DOCUMENT_GUARD]) return
-  rootMenu[DOCUMENT_GUARD] = true
-
-  const permitOutsideClose = (event: Event): void => {
-    const active = rootMenu[ACTIVE_ITEM]
-    if (!active) return
-
-    const target = event.target
-    if (!isDomNode(target)) return
-
-    const rootElement = getMenuElement(rootMenu)
-    const childElement = getMenuElement(active.menu)
-    const parentElement = getItemElement(active)
-
-    if (rootElement?.contains(target) || childElement?.contains(target) || parentElement?.contains(target)) return
-    allowNativeClose(win, rootMenu, active)
-  }
-
-  doc.addEventListener('pointerdown', permitOutsideClose, true)
-  doc.addEventListener('mousedown', permitOutsideClose, true)
-  doc.addEventListener(
-    'keydown',
-    (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      const active = rootMenu[ACTIVE_ITEM]
-      if (active) allowNativeClose(win, rootMenu, active)
-    },
-    true,
-  )
-}
-
-function patchSmartArtMenu(win: AnyObject, rootMenu: AnyObject): void {
-  patchRootMenuElement(win, rootMenu)
-  patchDocumentGuard(win, rootMenu)
-
-  const items = Array.isArray(rootMenu?.items) ? rootMenu.items : []
-  items.forEach((item: AnyObject) => patchCategoryItem(win, rootMenu, item))
-}
-
-function tryPatchFrame(frame: HTMLIFrameElement): boolean {
-  const win = getFrameWindow(frame)
-  if (!win) return false
-
-  installVisualFixes(win)
-
-  const controller = getToolbarController(win)
-  const toolbar = controller ? getToolbarView(controller) : null
-  const rootMenu = toolbar?.btnInsertSmartArt?.menu
-
-  if (!controller || !toolbar || !rootMenu) return false
-
-  if (!rootMenu[PATCHED_MENU]) {
-    rootMenu[PATCHED_MENU] = true
-
-    // Categories and their DataViews can be recreated each time SmartArt opens.
-    rootMenu.on?.('show:after', () => {
-      win.setTimeout?.(() => patchSmartArtMenu(win, rootMenu), 0)
-    })
-
-    rootMenu.on?.('hide:after', () => {
-      const active = rootMenu[ACTIVE_ITEM]
-      if (active) allowNativeClose(win, rootMenu, active)
-      rootMenu[IN_ROOT] = false
-    })
-  }
-
-  patchSmartArtMenu(win, rootMenu)
-  return true
+function installCompatibilityFixes(frame: HTMLIFrameElement): boolean {
+  const visualFixesReady = installVisualFixes(frame)
+  // Invoke every patch even while another menu is still initializing.
+  const insertMenusReady = INSERT_MENU_CONFIGS
+    .map((config) => patchInsertMenuPointerTransition(frame, config))
+    .every(Boolean)
+  return visualFixesReady && insertMenusReady
 }
 
 function startFrameProbe(frame: HTMLIFrameElement): void {
   const previousTimer = probeTimers.get(frame)
   if (previousTimer !== undefined) window.clearInterval(previousTimer)
+  probeTimers.delete(frame)
+  if (installCompatibilityFixes(frame)) return
 
   let attempts = 0
   const timer = window.setInterval(() => {
     attempts += 1
-
-    if (tryPatchFrame(frame) || attempts >= 480) {
+    if (installCompatibilityFixes(frame) || attempts >= 480) {
       window.clearInterval(timer)
       probeTimers.delete(frame)
     }
   }, 250)
-
   probeTimers.set(frame, timer)
-  tryPatchFrame(frame)
 }
 
 function registerFrame(frame: HTMLIFrameElement): void {
   if (registeredFrames.has(frame)) return
   registeredFrames.add(frame)
-
   frame.addEventListener('load', () => startFrameProbe(frame))
   startFrameProbe(frame)
 }
@@ -534,19 +252,16 @@ function scanFrames(): void {
 }
 
 /**
- * Compatibility fixes for Waltiva's local ONLYOFFICE document editor:
- * - keeps SmartArt parent/child menus open while the pointer crosses between them;
- * - leaves SmartArt template clicks untouched so the native insert action runs;
- * - keeps the Aurora Dark font-preview dropdown legible on a light surface.
+ * Retains the font-preview appearance fix for the local editor.
+ * SmartArt uses ONLYOFFICE's native preview, selection and menu lifecycle;
+ * its templates are bundled at sdkjs/common/SmartArts/SmartArts.bin. SmartArt
+ * and equation galleries only cancel ONLYOFFICE's stale hide timer while the
+ * pointer is physically inside them, so native selection and closing remain.
  */
 export function initSmartArtCompatibilityFix(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
 
   scanFrames()
-
   const observer = new MutationObserver(scanFrames)
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  })
+  observer.observe(document.documentElement, { childList: true, subtree: true })
 }
