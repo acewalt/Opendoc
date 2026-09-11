@@ -1,115 +1,107 @@
-# office-web-local
+# Waltiva
 
-A purely local project based on OnlyOffice, supporting local `opening and editing` of Office documents.
+Waltiva es un editor ofimático web que permite abrir, editar y trabajar con documentos de Office directamente desde el navegador, manteniendo el procesamiento de archivos de forma local siempre que es posible.
 
-[Live Demo🪄](https://sweetwisdom.github.io/onlyoffice-web-local/)
+Este proyecto está basado en [sweetwisdom/onlyoffice-web-local](https://github.com/sweetwisdom/onlyoffice-web-local), sobre el cual se han realizado cambios de interfaz, compatibilidad y experiencia de uso para adaptarlo a Waltiva.
 
-A local web-based document editor based on OnlyOffice, allowing you to edit documents directly in your browser without server-side processing, ensuring your privacy and security.
+**Demo:** [acewalt.github.io/Waltiva](https://acewalt.github.io/Waltiva/)
 
+## ✨ Cambios principales de Waltiva
 
-[English](README.md) | [中文](readme.zh.md)
+- 🇪🇸 **Interfaz en español**: se adaptó la interfaz de ONLYOFFICE para utilizar español como idioma principal.
+- 🎨 **Nuevo tema visual**: se implementó una apariencia propia para Waltiva, con una interfaz más moderna y consistente.
+- 🧩 **Corrección de SmartArt**: se corrigió un problema del menú de SmartArt que impedía utilizar correctamente sus categorías y submenús.
+- 📱 **Vista móvil propia**: se integró una visualización específica para dispositivos móviles, separada de la experiencia de escritorio y adaptada a pantallas pequeñas.
+- 🔒 **Procesamiento local**: los documentos se trabajan desde el navegador sin depender de un servidor tradicional de ONLYOFFICE para la edición local.
+- 📝 **Compatibilidad con documentos de Office**: soporte para formatos como DOCX, XLSX y PPTX, además de otros formatos compatibles con la base de ONLYOFFICE.
+- ⚡ **Aplicación web estática**: puede ejecutarse como una aplicación frontend y publicarse mediante GitHub Pages.
 
+## 🛠️ Base técnica
 
-## ✨ Key Features
+Waltiva conserva la arquitectura principal de `onlyoffice-web-local` y utiliza varias tecnologías del ecosistema ONLYOFFICE:
 
-- 🔒 **Privacy-First**: All document processing happens locally in your browser, with no uploads to any server
-- 📝 **Multi-Format Support**: Supports DOCX, XLSX, PPTX, and many other document formats
-- ⚡ **Real-Time Editing**: Provides smooth real-time document editing experience
-- 🚀 **No Server Required**: Pure frontend implementation with no server-side processing needed
-- 🎯 **Ready to Use**: Start editing documents immediately by opening the webpage
+- **ONLYOFFICE WebSDK / se-office** para la interfaz y las herramientas de edición.
+- **WebAssembly** para realizar conversiones de documentos localmente mediante `x2t-wasm`.
+- **Vue + Vite** para la aplicación web y su interfaz exterior.
+- **Arquitectura frontend** orientada a funcionar directamente en el navegador.
 
-## 🛠️ Technical Architecture
+## 📄 Apertura de archivos remotos
 
-This project is built on the following core technologies:
+Waltiva conserva la posibilidad de abrir determinados documentos remotos mediante parámetros en la URL.
 
-- **OnlyOffice SDK**: Provides powerful document editing capabilities
-- **WebAssembly**: Implements document format conversion through x2t-wasm
-- **Pure Frontend Architecture**: All functionality runs in the browser
+Parámetros disponibles:
 
-## 📄 Opening Remote Files
+- `url`: dirección del archivo remoto.
+- `filename`: nombre del archivo; es opcional si puede obtenerse automáticamente.
 
-### Functionality
+Ejemplo:
 
-Automatically downloads and opens remote Office files (e.g., `.docx`, `.pptx`) via route parameters, converting them into `File` objects for further use (e.g., preview or editing).
-
-### Usage
-
-The page URL must include the following parameters:
-
-- `url` (required): Remote file address
-- `filename` (optional): File name; if not provided, it will attempt to auto-resolve
-
-Example:
-[00.xlsx](https://sweetwisdom.github.io/onlyoffice-web-local/#/?url=https://sweetwisdom.github.io/react-filePreview/filePreview/00.xlsx)
-
-```
-?filename=00.pptx&url=https://example.com/files/00.pptx
+```text
+?filename=documento.docx&url=https://example.com/files/documento.docx
 ```
 
-### File Name Retrieval Priority
+El nombre del archivo se intenta obtener en este orden:
 
-1. Route parameter `filename`
-2. Parsed from `url`
-3. Extracted from response header `Content-Disposition`
+1. Parámetro `filename`.
+2. Nombre incluido en la propia URL.
+3. Cabecera HTTP `Content-Disposition`.
 
-If the file name cannot be retrieved, the operation will terminate with an error prompt.
+## 🚀 Desarrollo
 
-## Word
-
-![recording](./.imgs/recording.gif)
-
-## Excel
-
-![image-20250524104950359](./.imgs/image-20250524104950359.png)
-
-## PPT
-
-![image-20250524105044644](./.imgs/image-20250524105044644.png)
-
-## Export Document
-
-![image-20250524104854846](./.imgs/image-20250524104854846.png)
-
-## Development Setup
+Instalar dependencias:
 
 ```sh
 pnpm install
 ```
 
-### Compile and Hot-Reload for Development
+Ejecutar el entorno de desarrollo:
 
 ```sh
 pnpm dev
 ```
 
-### Type-Check, Compile, and Minify for Production
+Generar la versión de producción:
 
 ```sh
 pnpm build
 ```
 
-## Docker Support
+La compilación de producción se genera en el directorio configurado por Vite y puede publicarse como un sitio web estático.
 
-Build a custom image named `vue-local-office` (note: the `.` at the end of the command indicates using the Dockerfile in the current directory; adjust the path as needed):
+## 🐳 Docker
 
-```sh
-docker build -t vue-local-office .
-```
+También puede ejecutarse mediante Docker.
 
-Map ports and start the Docker container (8080:80 maps the container's port 80 to the host's port 8080; `local-office` is the custom container name; `vue-local-office` is the custom image name):
+Construir la imagen:
 
 ```sh
-docker run -dp 8080:80 --name local-office vue-local-office
+docker build -t waltiva .
 ```
 
-After executing the above commands, open http://localhost:8080 in a browser to preview.
+Ejecutar el contenedor:
 
-## Technical Details
+```sh
+docker run -dp 8080:80 --name waltiva waltiva
+```
 
-- Uses `x2t-wasm` as a replacement for OnlyOffice services
-- Utilizes OnlyOffice WebSDK for editing (sourced from `se-office`)
+Después se puede acceder desde:
 
-## References
+```text
+http://localhost:8080
+```
 
-- [Qihoo360/se-office: A full-featured office productivity suite based on open standards, enabling browser-based preview and editing of Office files.](https://github.com/Qihoo360/se-office)
-- [cryptpad/onlyoffice-x2t-wasm: CryptPad WebAssembly file conversion tool](https://github.com/cryptpad/onlyoffice-x2t-wasm)
+## 📌 Estado del proyecto
+
+Waltiva no pretende ser una distribución oficial de ONLYOFFICE. Es una adaptación independiente construida sobre proyectos de código abierto existentes, con modificaciones centradas en la experiencia web local, la interfaz en español, la personalización visual, la compatibilidad móvil y correcciones específicas de la interfaz.
+
+## 🙏 Créditos y proyectos base
+
+Este proyecto se apoya en el trabajo de otros proyectos de código abierto:
+
+- [sweetwisdom/onlyoffice-web-local](https://github.com/sweetwisdom/onlyoffice-web-local) — proyecto base utilizado para la edición local de documentos en el navegador.
+- [Qihoo360/se-office](https://github.com/Qihoo360/se-office) — suite ofimática web utilizada por la base del editor.
+- [cryptpad/onlyoffice-x2t-wasm](https://github.com/cryptpad/onlyoffice-x2t-wasm) — conversión de documentos mediante WebAssembly.
+
+## 📜 Licencia
+
+Waltiva conserva las obligaciones de licencia correspondientes a los proyectos de código abierto sobre los que está construido. Consulta el archivo de licencia del repositorio y las licencias de los proyectos mencionados anteriormente para conocer los términos aplicables.
