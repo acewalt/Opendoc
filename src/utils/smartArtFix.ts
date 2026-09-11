@@ -11,7 +11,17 @@ const probeTimers = new WeakMap<HTMLIFrameElement, number>()
 
 const PATCHED_MENU = '__waltivaSmartArtMenuPatched'
 const PATCHED_ITEM = '__waltivaSmartArtItemPatched'
-const PREVIEW_FALLBACK = '__waltivaSmartArtPreviewFallback'
+const PATCHED_CHILD_MENU = '__waltivaSmartArtChildMenuPatched'
+const ORIGINAL_ROOT_HIDE = '__waltivaSmartArtOriginalRootHide'
+const ORIGINAL_CHILD_HIDE = '__waltivaSmartArtOriginalChildHide'
+const ACTIVE_ITEM = '__waltivaSmartArtActiveItem'
+const HOLD_OPEN = '__waltivaSmartArtHoldOpen'
+const ALLOW_CLOSE = '__waltivaSmartArtAllowClose'
+const RELEASE_TIMER = '__waltivaSmartArtReleaseTimer'
+const IN_PARENT = '__waltivaSmartArtInParent'
+const IN_CHILD = '__waltivaSmartArtInChild'
+const IN_ROOT = '__waltivaSmartArtInRoot'
+const DOCUMENT_GUARD = '__waltivaSmartArtDocumentGuard'
 const VISUAL_FIX_STYLE_ID = 'waltiva-editor-compatibility-style'
 
 const VISUAL_FIX_CSS = `
@@ -104,165 +114,362 @@ function getItemElement(item: AnyObject): HTMLElement | null {
   return isDomElement(element) ? element : null
 }
 
+function getMenuElement(menu: AnyObject): HTMLElement | null {
+  const element = menu?.$el?.[0] ?? menu?.cmpEl?.[0] ?? menu?.el
+  return isDomElement(element) ? element : null
+}
+
 function getItemJQuery(item: AnyObject): AnyObject | null {
   const jq = item?.$el ?? item?.cmpEl
   return jq?.length ? jq : null
 }
 
-function closeSiblingCategories(rootMenu: AnyObject, activeItem: AnyObject): void {
+function clearReleaseTimer(win: AnyObject, item: AnyObject): void {
+  if (!item?.[RELEASE_TIMER]) return
+  try {
+    win.clearTimeout?.(item[RELEASE_TIMER])
+  } catch {
+    // Ignore stale timers owned by an old render of the menu.
+  }
+  item[RELEASE_TIMER] = null
+}
+
+function clearNativeTimers(win: AnyObject, item: AnyObject): void {
+  for (const key of ['hideMenuTimer', 'expandMenuTimer']) {
+    if (!item?.[key]) continue
+    try {
+      win.clearTimeout?.(item[key])
+    } catch {
+      // ONLYOFFICE owns these timers; failure here must not block SmartArt.
+    }
+    item[key] = null
+  }
+}
+
+function allowNativeClose(win: AnyObject, rootMenu: AnyObject, item: AnyObject): void {
+  if (!item) return
+  clearReleaseTimer(win, item)
+  clearNativeTimers(win, item)
+  item[HOLD_OPEN] = false
+  item[ALLOW_CLOSE] = true
+  item[IN_PARENT] = false
+  item[IN_CHILD] = false
+  if (rootMenu?.[ACTIVE_ITEM] === item) rootMenu[ACTIVE_ITEM] = null
+}
+
+function patchHideGuards(rootMenu: AnyObject, item: AnyObject): void {
+  if (typeof rootMenu?.hide === 'function' && !rootMenu[ORIGINAL_ROOT_HIDE]) {
+    const originalRootHide = rootMenu.hide
+    rootMenu[ORIGINAL_ROOT_HIDE] = originalRootHide
+    rootMenu.hide = function (...args: any[]) {
+      const active = rootMenu[ACTIVE_ITEM]
+      if (active?.[HOLD_OPEN] && !active?.[ALLOW_CLOSE]) return this
+      return originalRootHide.apply(this, args)
+    }
+  }
+
+  if (typeof item?.menu?.hide === 'function' && !item.menu[ORIGINAL_CHILD_HIDE]) {
+    const originalChildHide = item.menu.hide
+    item.menu[ORIGINAL_CHILD_HIDE] = originalChildHide
+    item.menu.hide = function (...args: any[]) {
+      if (item[HOLD_OPEN] && !item[ALLOW_CLOSE]) return this
+      return originalChildHide.apply(this, args)
+    }
+  }
+}
+
+function holdCategoryOpen(win: AnyObject, rootMenu: AnyObject, item: AnyObject): void {
+  const previous = rootMenu?.[ACTIVE_ITEM]
+  if (previous && previous !== item) allowNativeClose(win, rootMenu, previous)
+
+  clearReleaseTimer(win, item)
+  clearNativeTimers(win, item)
+  patchHideGuards(rootMenu, item)
+
+  rootMenu[ACTIVE_ITEM] = item
+  item[HOLD_OPEN] = true
+  item[ALLOW_CLOSE] = false
+}
+
+function releaseCategory(
+  win: AnyObject,
+  rootMenu: AnyObject,
+  item: AnyObject,
+  closeRoot: boolean,
+): void {
+  if (!item) return
+
+  clearReleaseTimer(win, item)
+  item[HOLD_OPEN] = false
+  item[ALLOW_CLOSE] = true
+
+  try {
+    item.menu?.hide?.()
+  } catch {
+    // The menu may already have been removed by ONLYOFFICE after a selection.
+  }
+
+  getItemJQuery(item)?.removeClass('over open')
+  if (rootMenu?.[ACTIVE_ITEM] === item) rootMenu[ACTIVE_ITEM] = null
+
+  if (closeRoot) {
+    try {
+      rootMenu?.hide?.()
+    } catch {
+      // Let ONLYOFFICE finish its own close lifecycle if the menu is already closing.
+    }
+  }
+}
+
+function scheduleRelease(win: AnyObject, rootMenu: AnyObject, item: AnyObject): void {
+  clearReleaseTimer(win, item)
+  item[RELEASE_TIMER] = win.setTimeout?.(() => {
+    item[RELEASE_TIMER] = null
+    if (rootMenu?.[ACTIVE_ITEM] !== item) return
+    if (item[IN_PARENT] || item[IN_CHILD]) return
+
+    releaseCategory(win, rootMenu, item, !rootMenu?.[IN_ROOT])
+  }, 280)
+}
+
+function closeSiblingCategories(win: AnyObject, rootMenu: AnyObject, activeItem: AnyObject): void {
   const items = Array.isArray(rootMenu?.items) ? rootMenu.items : []
 
   items.forEach((item: AnyObject) => {
-    if (item === activeItem) return
+    if (item === activeItem || !item?.menu) return
 
-    const $item = getItemJQuery(item)
-    if (!$item) return
-
-    if (item.hideMenuTimer) {
-      try {
-        clearTimeout(item.hideMenuTimer)
-      } catch {
-        // ONLYOFFICE owns this timer; failure here must not block SmartArt.
-      }
-    }
+    item[HOLD_OPEN] = false
+    item[ALLOW_CLOSE] = true
+    clearReleaseTimer(win, item)
+    clearNativeTimers(win, item)
 
     try {
-      item.menu?.hide?.()
+      item.menu.hide?.()
     } catch {
-      // A sibling menu can already be detached while the root menu is closing.
+      // A sibling can already be detached while another category opens.
     }
 
-    $item.removeClass('over open')
+    getItemJQuery(item)?.removeClass('over open')
   })
 }
 
-function schedulePreviewFallback(
+function patchChildMenu(
   win: AnyObject,
-  controller: AnyObject,
+  rootMenu: AnyObject,
   item: AnyObject,
+  parentElement: HTMLElement,
 ): void {
-  const picker = item?.menuPicker
-  if (!picker?.store || picker.store.length > 0 || item[PREVIEW_FALLBACK]) return
+  const childElement = getMenuElement(item.menu)
+  if (!childElement || item.menu[PATCHED_CHILD_MENU] === childElement) return
+  item.menu[PATCHED_CHILD_MENU] = childElement
 
-  item[PREVIEW_FALLBACK] = true
+  childElement.addEventListener('mouseenter', () => {
+    item[IN_CHILD] = true
+    holdCategoryOpen(win, rootMenu, item)
+  })
 
-  win.setTimeout?.(() => {
-    item[PREVIEW_FALLBACK] = false
-    if (picker.store?.length > 0) return
-
-    const api = controller?.api
-    if (typeof api?.asc_generateSmartArtPreviews !== 'function') return
-
-    try {
-      api.asc_generateSmartArtPreviews(item.value)
-    } catch (error) {
-      console.error('[Waltiva] No se pudieron generar las previsualizaciones de SmartArt.', error)
+  childElement.addEventListener('mouseleave', (event: MouseEvent) => {
+    item[IN_CHILD] = false
+    const related = event.relatedTarget
+    if (isDomNode(related) && parentElement.contains(related)) {
+      item[IN_PARENT] = true
+      holdCategoryOpen(win, rootMenu, item)
+      return
     }
-  }, 650)
+    scheduleRelease(win, rootMenu, item)
+  })
+
+  const permitSelectionClose = (event: Event): void => {
+    const target = event.target
+    if (!isDomElement(target)) return
+    const selectable = target.closest('li, .item, .dataview-item, [role="option"], [role="menuitem"]')
+    if (!selectable || !childElement.contains(selectable)) return
+
+    // Do not cancel the event: the native DataView click must insert the chosen SmartArt.
+    allowNativeClose(win, rootMenu, item)
+  }
+
+  childElement.addEventListener('pointerdown', permitSelectionClose, true)
+  childElement.addEventListener('mousedown', permitSelectionClose, true)
+  childElement.addEventListener(
+    'keydown',
+    (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        allowNativeClose(win, rootMenu, item)
+        return
+      }
+      if (event.key === 'Enter' || event.key === ' ') permitSelectionClose(event)
+    },
+    true,
+  )
 }
 
 function openSmartArtCategory(
   win: AnyObject,
-  controller: AnyObject,
   rootMenu: AnyObject,
   item: AnyObject,
 ): void {
   if (!item?.menu || item.disabled || item.isDisabled?.()) return
 
   const $item = getItemJQuery(item)
-  if (!$item) return
+  const element = getItemElement(item)
+  if (!$item || !element) return
 
-  if (item.hideMenuTimer) {
-    try {
-      win.clearTimeout?.(item.hideMenuTimer)
-    } catch {
-      // Keep opening even if a stale ONLYOFFICE timer cannot be cleared.
-    }
-  }
-
-  if (item.expandMenuTimer) {
-    try {
-      win.clearTimeout?.(item.expandMenuTimer)
-    } catch {
-      // Keep opening even if a stale ONLYOFFICE timer cannot be cleared.
-    }
-  }
-
-  closeSiblingCategories(rootMenu, item)
+  holdCategoryOpen(win, rootMenu, item)
+  closeSiblingCategories(win, rootMenu, item)
 
   try {
-    // SmartArt in this build creates the child menu correctly, but opening it is
-    // coupled to a one-shot mouseenter used to request SDK previews. Open the
-    // native child menu independently so a delayed preview cannot hide it.
+    // Keep the native menu implementation. We only decouple visibility from the
+    // fragile leave/hide timers; native mouseenter can still populate previews.
     $item.addClass('over open')
-    $item.trigger('show.bs.dropdown')
     item.menu.show?.()
     item.menu.alignPosition?.()
-    $item.trigger('shown.bs.dropdown')
-    item.menu.alignPosition?.()
+    patchChildMenu(win, rootMenu, item, element)
+
+    win.requestAnimationFrame?.(() => {
+      try {
+        item.menu.alignPosition?.()
+        patchChildMenu(win, rootMenu, item, element)
+      } catch {
+        // Menu could have been replaced after the preview DataView rendered.
+      }
+    })
+
+    win.setTimeout?.(() => patchChildMenu(win, rootMenu, item, element), 40)
   } catch (error) {
     console.error('[Waltiva] No se pudo abrir el submenú de SmartArt.', error)
   }
-
-  schedulePreviewFallback(win, controller, item)
 }
 
 function patchCategoryItem(
   win: AnyObject,
-  controller: AnyObject,
   rootMenu: AnyObject,
   item: AnyObject,
 ): void {
-  if (!item?.menu || item[PATCHED_ITEM]) return
+  if (!item?.menu) return
 
   const element = getItemElement(item)
   if (!element || !getItemJQuery(item)) return
+  if (item[PATCHED_ITEM] === element) {
+    patchChildMenu(win, rootMenu, item, element)
+    return
+  }
 
-  item[PATCHED_ITEM] = true
+  item[PATCHED_ITEM] = element
+  patchHideGuards(rootMenu, item)
 
-  // Capture phase runs before the legacy jQuery mouseenter callback.
-  element.addEventListener(
-    'mouseover',
-    (event: MouseEvent) => {
-      const related = event.relatedTarget
-      if (isDomNode(related) && element.contains(related)) return
-      openSmartArtCategory(win, controller, rootMenu, item)
-    },
-    true,
-  )
+  element.addEventListener('mouseenter', () => {
+    item[IN_PARENT] = true
+    openSmartArtCategory(win, rootMenu, item)
+  })
+
+  element.addEventListener('mouseleave', (event: MouseEvent) => {
+    item[IN_PARENT] = false
+    const childElement = getMenuElement(item.menu)
+    const related = event.relatedTarget
+    if (childElement && isDomNode(related) && childElement.contains(related)) {
+      item[IN_CHILD] = true
+      holdCategoryOpen(win, rootMenu, item)
+      return
+    }
+    scheduleRelease(win, rootMenu, item)
+  })
 
   const directAnchor = element.querySelector(':scope > a') as HTMLAnchorElement | null
   if (directAnchor) {
     directAnchor.addEventListener(
       'click',
       (event: MouseEvent) => {
+        // Category rows are containers, not SmartArt choices. Prevent ONLYOFFICE
+        // from treating this click as an outside selection that closes the root.
         event.preventDefault()
         event.stopPropagation()
-        openSmartArtCategory(win, controller, rootMenu, item)
+        openSmartArtCategory(win, rootMenu, item)
       },
       true,
     )
 
     directAnchor.addEventListener('focus', () => {
-      openSmartArtCategory(win, controller, rootMenu, item)
+      item[IN_PARENT] = true
+      openSmartArtCategory(win, rootMenu, item)
     })
 
     directAnchor.addEventListener(
       'keydown',
       (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          allowNativeClose(win, rootMenu, item)
+          return
+        }
         if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'ArrowRight') return
         event.preventDefault()
         event.stopPropagation()
-        openSmartArtCategory(win, controller, rootMenu, item)
+        openSmartArtCategory(win, rootMenu, item)
       },
       true,
     )
   }
+
+  patchChildMenu(win, rootMenu, item, element)
 }
 
-function patchSmartArtMenu(win: AnyObject, controller: AnyObject, rootMenu: AnyObject): void {
+function patchRootMenuElement(win: AnyObject, rootMenu: AnyObject): void {
+  const rootElement = getMenuElement(rootMenu)
+  if (!rootElement || rootMenu.__waltivaSmartArtRootElement === rootElement) return
+  rootMenu.__waltivaSmartArtRootElement = rootElement
+
+  rootElement.addEventListener('mouseenter', () => {
+    rootMenu[IN_ROOT] = true
+    const active = rootMenu[ACTIVE_ITEM]
+    if (active) clearReleaseTimer(win, active)
+  })
+
+  rootElement.addEventListener('mouseleave', () => {
+    rootMenu[IN_ROOT] = false
+    const active = rootMenu[ACTIVE_ITEM]
+    if (active) scheduleRelease(win, rootMenu, active)
+  })
+}
+
+function patchDocumentGuard(win: AnyObject, rootMenu: AnyObject): void {
+  const doc = win.document as Document | undefined
+  if (!doc || rootMenu[DOCUMENT_GUARD]) return
+  rootMenu[DOCUMENT_GUARD] = true
+
+  const permitOutsideClose = (event: Event): void => {
+    const active = rootMenu[ACTIVE_ITEM]
+    if (!active) return
+
+    const target = event.target
+    if (!isDomNode(target)) return
+
+    const rootElement = getMenuElement(rootMenu)
+    const childElement = getMenuElement(active.menu)
+    const parentElement = getItemElement(active)
+
+    if (rootElement?.contains(target) || childElement?.contains(target) || parentElement?.contains(target)) return
+    allowNativeClose(win, rootMenu, active)
+  }
+
+  doc.addEventListener('pointerdown', permitOutsideClose, true)
+  doc.addEventListener('mousedown', permitOutsideClose, true)
+  doc.addEventListener(
+    'keydown',
+    (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      const active = rootMenu[ACTIVE_ITEM]
+      if (active) allowNativeClose(win, rootMenu, active)
+    },
+    true,
+  )
+}
+
+function patchSmartArtMenu(win: AnyObject, rootMenu: AnyObject): void {
+  patchRootMenuElement(win, rootMenu)
+  patchDocumentGuard(win, rootMenu)
+
   const items = Array.isArray(rootMenu?.items) ? rootMenu.items : []
-  items.forEach((item: AnyObject) => patchCategoryItem(win, controller, rootMenu, item))
+  items.forEach((item: AnyObject) => patchCategoryItem(win, rootMenu, item))
 }
 
 function tryPatchFrame(frame: HTMLIFrameElement): boolean {
@@ -280,14 +487,19 @@ function tryPatchFrame(frame: HTMLIFrameElement): boolean {
   if (!rootMenu[PATCHED_MENU]) {
     rootMenu[PATCHED_MENU] = true
 
-    // The legacy bundle creates each category DataView in show:before.
-    // Patch immediately after that first render and on subsequent openings.
+    // Categories and their DataViews can be recreated each time SmartArt opens.
     rootMenu.on?.('show:after', () => {
-      win.setTimeout?.(() => patchSmartArtMenu(win, controller, rootMenu), 0)
+      win.setTimeout?.(() => patchSmartArtMenu(win, rootMenu), 0)
+    })
+
+    rootMenu.on?.('hide:after', () => {
+      const active = rootMenu[ACTIVE_ITEM]
+      if (active) allowNativeClose(win, rootMenu, active)
+      rootMenu[IN_ROOT] = false
     })
   }
 
-  patchSmartArtMenu(win, controller, rootMenu)
+  patchSmartArtMenu(win, rootMenu)
   return true
 }
 
@@ -323,7 +535,8 @@ function scanFrames(): void {
 
 /**
  * Compatibility fixes for Waltiva's local ONLYOFFICE document editor:
- * - restores SmartArt child-menu opening independently from preview generation;
+ * - keeps SmartArt parent/child menus open while the pointer crosses between them;
+ * - leaves SmartArt template clicks untouched so the native insert action runs;
  * - keeps the Aurora Dark font-preview dropdown legible on a light surface.
  */
 export function initSmartArtCompatibilityFix(): void {
