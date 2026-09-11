@@ -1,0 +1,30 @@
+/*
+ * Waltiva — Aurora Dark / left panel corner consistency
+ * ------------------------------------------------------------
+ * The Search/Replace panel paints an opaque inner surface that can visually
+ * cover the rounded outer shell. Clip that surface to the same Aurora radius
+ * used by the other left sidebar panels.
+ */
+
+html[data-waltiva-theme='aurora-dark'] #view-left-menu > .left-panel > #left-panel-search,
+html[data-waltiva-theme='aurora-dark'] #view-left-menu > .left-panel > [id^='left-panel-'][id*='search'],
+html[data-waltiva-theme='aurora-dark'] #view-left-menu > .left-panel > [id^='left-panel-'][id*='find'],
+body.theme-aurora-dark #view-left-menu > .left-panel > #left-panel-search,
+body.theme-aurora-dark #view-left-menu > .left-panel > [id^='left-panel-'][id*='search'],
+body.theme-aurora-dark #view-left-menu > .left-panel > [id^='left-panel-'][id*='find'] {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background-clip: padding-box !important;
+}
+
+/* Fallback for builds where the search view is wrapped in a generic
+   left-panel container. This keeps only the first painted surface rounded,
+   without changing layout, sizing, or scrolling behaviour. */
+html[data-waltiva-theme='aurora-dark'] #view-left-menu > .left-panel > [id^='left-panel-'] > .search-panel,
+html[data-waltiva-theme='aurora-dark'] #view-left-menu > .left-panel > [id^='left-panel-'] > .search-replace,
+body.theme-aurora-dark #view-left-menu > .left-panel > [id^='left-panel-'] > .search-panel,
+body.theme-aurora-dark #view-left-menu > .left-panel > [id^='left-panel-'] > .search-replace {
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background-clip: padding-box !important;
+}
