@@ -4,32 +4,50 @@ const FRAME_SELECTOR = [
   'iframe[src*="/web-apps/apps/documenteditor/"]',
 ].join(', ')
 
-const LINK_ID = 'waltiva-aurora-continuity-styles'
+const CONTINUITY_LINK_ID = 'waltiva-aurora-continuity-styles'
+const CANVAS_SURFACE_LINK_ID = 'waltiva-aurora-canvas-surface-styles'
 const observedFrames = new WeakSet<HTMLIFrameElement>()
 const retryTimers = new WeakMap<HTMLIFrameElement, number>()
 
-function getStylesheetUrl(): string {
-  return new URL('./waltiva/themes/aurora-continuity.css?v=1', document.baseURI).href
+function getStylesheetUrl(path: string): string {
+  return new URL(path, document.baseURI).href
 }
 
-function installStylesheet(frame: HTMLIFrameElement): boolean {
+function ensureStylesheet(doc: Document, id: string, path: string): boolean {
+  if (!doc.head) return false
+
+  const href = getStylesheetUrl(path)
+  const existing = doc.getElementById(id) as HTMLLinkElement | null
+  if (existing) {
+    if (existing.href !== href) existing.href = href
+    return true
+  }
+
+  const link = doc.createElement('link')
+  link.id = id
+  link.rel = 'stylesheet'
+  link.href = href
+  doc.head.appendChild(link)
+  return true
+}
+
+function installStylesheets(frame: HTMLIFrameElement): boolean {
   try {
     const doc = frame.contentDocument
     if (!doc?.head) return false
 
-    const existing = doc.getElementById(LINK_ID) as HTMLLinkElement | null
-    if (existing) {
-      const href = getStylesheetUrl()
-      if (existing.href !== href) existing.href = href
-      return true
-    }
+    const continuityReady = ensureStylesheet(
+      doc,
+      CONTINUITY_LINK_ID,
+      './waltiva/themes/aurora-continuity.css?v=2',
+    )
+    const canvasReady = ensureStylesheet(
+      doc,
+      CANVAS_SURFACE_LINK_ID,
+      './waltiva/themes/aurora-canvas-surface.css?v=1',
+    )
 
-    const link = doc.createElement('link')
-    link.id = LINK_ID
-    link.rel = 'stylesheet'
-    link.href = getStylesheetUrl()
-    doc.head.appendChild(link)
-    return true
+    return continuityReady && canvasReady
   } catch {
     return false
   }
@@ -39,12 +57,12 @@ function startRetry(frame: HTMLIFrameElement): void {
   const previous = retryTimers.get(frame)
   if (previous !== undefined) window.clearInterval(previous)
 
-  if (installStylesheet(frame)) return
+  if (installStylesheets(frame)) return
 
   let attempts = 0
   const timer = window.setInterval(() => {
     attempts += 1
-    if (installStylesheet(frame) || attempts >= 240) {
+    if (installStylesheets(frame) || attempts >= 240) {
       window.clearInterval(timer)
       retryTimers.delete(frame)
     }
@@ -66,8 +84,10 @@ function scan(): void {
 }
 
 /**
- * Loads the second Aurora Dark stylesheet inside ONLYOFFICE's same-origin iframe.
- * The file contains only visual overrides and is inert unless Aurora Dark is active.
+ * Loads the Aurora Dark visual layers inside ONLYOFFICE's same-origin iframe.
+ * The first stylesheet carries the general skin; the second fixes the SDK's
+ * concrete canvas/perimeter colors so the workspace cannot fall back to black.
+ * Both files are inert unless Aurora Dark is active.
  */
 export function initAuroraContinuityLayer(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
