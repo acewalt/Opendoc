@@ -100,18 +100,6 @@ jobs:
               return !!frame?.contentDocument?.querySelector('[data-waltiva-theme-option="aurora-dark"]');
             }, null, { timeout: 120000 });
 
-            const before = await page.evaluate(() => {
-              const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
-              const doc = frame?.contentDocument;
-              const item = doc?.querySelector('[data-waltiva-theme-option="aurora-dark"]');
-              return {
-                exists: !!item,
-                rootTheme: doc?.documentElement.getAttribute('data-waltiva-theme'),
-                bodyClass: doc?.body?.className || '',
-              };
-            });
-            assert.ok(before.exists, 'Aurora Dark no aparece en el menú');
-
             await page.evaluate(() => {
               const frame = document.querySelector('iframe[name="frameEditor"], #iframe iframe');
               const doc = frame.contentDocument;
@@ -163,5 +151,4 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add src/utils/waltivaTheme.ts
           git commit -m "fix(theme): activate Aurora Dark inside ONLYOFFICE iframe"
-          git pull --rebase origin main
           git push
