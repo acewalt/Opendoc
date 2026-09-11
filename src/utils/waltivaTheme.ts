@@ -291,6 +291,12 @@ function closeDropdown(menu: Element): void {
   menu.closest('.over')?.classList.remove('over')
 }
 
+function getEventTargetElement(event: Event): HTMLElement | null {
+  const target = event.target as EventTarget | null
+  if (!target || typeof (target as HTMLElement).closest !== 'function') return null
+  return target as HTMLElement
+}
+
 export function initWaltivaThemeSystem(): () => void {
   if (initialized || typeof window === 'undefined' || typeof document === 'undefined') {
     return () => undefined
@@ -356,7 +362,7 @@ export function initWaltivaThemeSystem(): () => void {
     })
 
     const getAuroraContext = (event: Event): { item: HTMLElement; menu: HTMLElement } | null => {
-      const target = event.target instanceof Element ? event.target : null
+      const target = getEventTargetElement(event)
       if (!target) return null
 
       const item = target.closest<HTMLElement>(`[${CUSTOM_OPTION_ATTRIBUTE}="${AURORA_DARK}"]`)
@@ -389,7 +395,7 @@ export function initWaltivaThemeSystem(): () => void {
     const onClick = (event: MouseEvent): void => {
       if (activateAurora(event, true)) return
 
-      const target = event.target instanceof Element ? event.target : null
+      const target = getEventTargetElement(event)
       if (!target) return
 
       const item = target.closest<HTMLElement>('li')
